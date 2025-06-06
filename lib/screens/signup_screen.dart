@@ -9,8 +9,8 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final ApiService apiService = ApiService();
-  final bool useRealApi = false;
-  final _fullNameController = TextEditingController();
+  final bool useRealApi = true;
+  final _nameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -18,7 +18,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _fullNameController.dispose();
+    _nameController.dispose();
     _phoneNumberController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -26,19 +26,35 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   void _signup() async {
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please fill in all required fields')),
+      );
+      return;
+    }
+
+    if (_passwordController.text.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Password must be at least 6 characters long')),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
     try {
       final success = useRealApi
           ? await apiService.signupFromApi(
-              _fullNameController.text,
+              _nameController.text,
               _phoneNumberController.text,
               _emailController.text,
               _passwordController.text,
             )
           : await apiService.signup(
-              _fullNameController.text,
+              _nameController.text,
               _phoneNumberController.text,
               _emailController.text,
               _passwordController.text,
@@ -48,7 +64,7 @@ class _SignupScreenState extends State<SignupScreen> {
           context: context,
           builder: (context) => AlertDialog(
             title: Text('Success'),
-            content: Text('Registration successful!'),
+            content: Text('Registration successful! Please login to continue.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -93,9 +109,9 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               SizedBox(height: 20),
               TextField(
-                controller: _fullNameController,
+                controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'full name',
+                  labelText: 'full name *',
                   prefixIcon: Icon(Icons.person),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
@@ -106,7 +122,7 @@ class _SignupScreenState extends State<SignupScreen> {
               TextField(
                 controller: _phoneNumberController,
                 decoration: InputDecoration(
-                  labelText: 'phone number',
+                  labelText: 'phone number (optional)',
                   prefixIcon: Icon(Icons.phone),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
@@ -118,7 +134,7 @@ class _SignupScreenState extends State<SignupScreen> {
               TextField(
                 controller: _emailController,
                 decoration: InputDecoration(
-                  labelText: 'email',
+                  labelText: 'email *',
                   prefixIcon: Icon(Icons.email),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
@@ -131,7 +147,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 controller: _passwordController,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelText: 'password',
+                  labelText: 'password * (min 6 characters)',
                   prefixIcon: Icon(Icons.lock),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),

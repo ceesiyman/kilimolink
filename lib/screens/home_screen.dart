@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import '../model/weather_model.dart';
-import '../model/crop_price_model.dart';
+import '../model/product_model.dart';
 import '../service/api_service.dart';
-import '../screens/crop_detail_screen.dart';
 import '../screens/market_screen.dart';
 import '../screens/expert_screen.dart';
 import '../screens/community_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/crop_detail_screen.dart';
 import '../widgets/bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,14 +17,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService apiService = ApiService();
   late Future<Weather> weatherFuture;
-  late Future<List<CropPrice>> cropPricesFuture;
-  final bool useRealApi = false;
+  late Future<List<Product>> featuredProductsFuture;
+  final bool useRealApi = true;
 
   @override
   void initState() {
     super.initState();
     weatherFuture = apiService.fetchRealWeather();
-    cropPricesFuture = useRealApi ? apiService.fetchCropPricesFromApi() : apiService.fetchCropPrices();
+    featuredProductsFuture = apiService.fetchFeaturedProductsFromApi();
   }
 
   void _onNavTap(int index) {
@@ -145,94 +145,115 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SizedBox(height: 20),
 
-                // Crops Section
+                // Featured Products Section
                 Text(
-                  'Crops',
+                  'Featured Products',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 10),
-                FutureBuilder<List<CropPrice>>(
-                  future: cropPricesFuture,
+                FutureBuilder<List<Product>>(
+                  future: featuredProductsFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator());
                     } else if (snapshot.hasError) {
                       return Text('Error: ${snapshot.error}');
                     } else if (snapshot.hasData) {
-                      final crops = snapshot.data!;
-                      return Wrap(
-                        spacing: 20,
-                        runSpacing: 10,
-                        children: crops.map((crop) {
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => CropDetailScreen(crop: crop),
-                                ),
-                              );
-                            },
-                            child: _buildCropIcon(crop.name, crop.imageUrl),
-                          );
-                        }).toList(),
-                      );
-                    }
-                    return SizedBox.shrink();
-                  },
-                ),
-                SizedBox(height: 20),
-
-                // Market Prices Section
-                Text(
-                  'Market Prices',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 10),
-                FutureBuilder<List<CropPrice>>(
-                  future: cropPricesFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasError) {
-                      return Text('Error: ${snapshot.error}');
-                    } else if (snapshot.hasData) {
-                      final cropPrices = snapshot.data!;
+                      final products = snapshot.data!;
                       return Column(
-                        children: cropPrices.map((crop) {
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => CropDetailScreen(crop: crop),
+                        children: [
+                          // Product Grid
+                          Wrap(
+                            spacing: 20,
+                            runSpacing: 10,
+                            children: products.map((product) {
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => CropDetailScreen(product: product),
+                                    ),
+                                  );
+                                },
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 60,
+                                      height: 60,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        image: DecorationImage(
+                                          image: NetworkImage(product.image),
+                                          fit: BoxFit.cover,
+                                          onError: (exception, stackTrace) {
+                                            print('Error loading image: $exception');
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+                                    Text(
+                                      product.name,
+                                      style: TextStyle(fontSize: 12),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
                                 ),
                               );
-                            },
-                            child: Card(
-                              elevation: 2,
-                              margin: EdgeInsets.symmetric(vertical: 8.0),
-                              child: ListTile(
-                                leading: Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8.0),
-                                    image: DecorationImage(
-                                      image: NetworkImage(crop.imageUrl),
-                                      fit: BoxFit.cover,
-                                      onError: (exception, stackTrace) {
-                                        print('Error loading image: $exception');
-                                      },
+                            }).toList(),
+                          ),
+                          SizedBox(height: 20),
+                          
+                          // Product List
+                          ...products.map((product) {
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => CropDetailScreen(product: product),
+                                  ),
+                                );
+                              },
+                              child: Card(
+                                elevation: 2,
+                                margin: EdgeInsets.symmetric(vertical: 8.0),
+                                child: ListTile(
+                                  leading: Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8.0),
+                                      image: DecorationImage(
+                                        image: NetworkImage(product.image),
+                                        fit: BoxFit.cover,
+                                        onError: (exception, stackTrace) {
+                                          print('Error loading image: $exception');
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(product.name),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(product.category.name),
+                                      Text('Stock: ${product.stock}'),
+                                    ],
+                                  ),
+                                  trailing: Text(
+                                    '${product.price.toStringAsFixed(2)} Tsh',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
                                     ),
                                   ),
                                 ),
-                                title: Text(crop.name),
-                                trailing: Text('${crop.pricePerKg} Tsh per Kg'),
                               ),
-                            ),
-                          );
-                        }).toList(),
+                            );
+                          }).toList(),
+                        ],
                       );
                     }
                     return SizedBox.shrink();
@@ -247,29 +268,6 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: 0,
         onTap: _onNavTap,
       ),
-    );
-  }
-
-  Widget _buildCropIcon(String name, String imageUrl) {
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            image: DecorationImage(
-              image: NetworkImage(imageUrl),
-              fit: BoxFit.cover,
-              onError: (exception, stackTrace) {
-                print('Error loading image: $exception');
-              },
-            ),
-          ),
-        ),
-        SizedBox(height: 5),
-        Text(name),
-      ],
     );
   }
 }

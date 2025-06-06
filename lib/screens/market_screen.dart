@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../model/market_product_model.dart';
+import '../model/product_model.dart';
 import '../service/api_service.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'cart_screen.dart';
@@ -7,6 +7,7 @@ import 'home_screen.dart';
 import 'expert_screen.dart';
 import 'community_screen.dart';
 import 'profile_screen.dart';
+import 'crop_detail_screen.dart';
 
 class MarketScreen extends StatefulWidget {
   @override
@@ -15,22 +16,44 @@ class MarketScreen extends StatefulWidget {
 
 class _MarketScreenState extends State<MarketScreen> {
   final ApiService apiService = ApiService();
-  late Future<List<MarketProduct>> marketProductsFuture;
-  final bool useRealApi = false;
-  String selectedCategory = 'Fruits'; // Default category
-  List<MarketProduct> cartItems = []; // Store cart items
-  String searchQuery = ''; // Store search query
-  List<MarketProduct> allProducts = []; // Store all products for filtering
+  late Future<List<Category>> categoriesFuture;
+  late Future<List<Product>> productsFuture;
+  List<Map<String, dynamic>> cartItems = [];
+  String searchQuery = '';
+  Category? selectedCategory;
+  final TextEditingController minPriceController = TextEditingController();
+  final TextEditingController maxPriceController = TextEditingController();
+  Map<int, int> productQuantities = {};
 
   @override
   void initState() {
     super.initState();
-    marketProductsFuture = useRealApi ? apiService.fetchMarketProductsFromApi() : apiService.fetchMarketProducts();
-    // Fetch all products initially to enable local filtering
-    marketProductsFuture.then((products) {
-      setState(() {
-        allProducts = products;
-      });
+    categoriesFuture = apiService.fetchCategoriesFromApi();
+    productsFuture = apiService.fetchProductsFromApi();
+    cartItems = [];
+  }
+
+  @override
+  void dispose() {
+    minPriceController.dispose();
+    maxPriceController.dispose();
+    super.dispose();
+  }
+
+  void _fetchProducts() {
+    setState(() {
+      double? minPrice = minPriceController.text.isNotEmpty 
+          ? double.tryParse(minPriceController.text) 
+          : null;
+      double? maxPrice = maxPriceController.text.isNotEmpty 
+          ? double.tryParse(maxPriceController.text) 
+          : null;
+
+      productsFuture = apiService.fetchProductsFromApi(
+        categoryId: selectedCategory?.id,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+      );
     });
   }
 
@@ -55,7 +78,7 @@ class _MarketScreenState extends State<MarketScreen> {
         MaterialPageRoute(builder: (context) => CommunityScreen()),
         (route) => false,
       );
-    }else if (index == 4) {
+    } else if (index == 4) {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => ProfileScreen()),
@@ -64,25 +87,61 @@ class _MarketScreenState extends State<MarketScreen> {
     }
   }
 
-  void _addToCart(MarketProduct product) {
+  void _navigateToCart() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CartScreen(cartItems: cartItems),
+      ),
+    );
+  }
+
+  void _addToCart(Product product) {
     setState(() {
-      cartItems.add(product);
+      int existingIndex = cartItems.indexWhere((item) => (item['product'] as Product).id == product.id);
+      
+      if (existingIndex != -1) {
+        cartItems[existingIndex]['quantity'] = (cartItems[existingIndex]['quantity'] as int) + 1;
+      } else {
+        cartItems.add({
+          'product': product,
+          'quantity': 1,
+        });
+      }
+      
+      productQuantities[product.id] = (productQuantities[product.id] ?? 0) + 1;
     });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${product.name} added to cart')),
     );
   }
 
-  void _updateSearchQuery(String query) async {
+  void _updateQuantity(Product product, int newQuantity) {
+    if (newQuantity < 0) return;
+    
+    setState(() {
+      productQuantities[product.id] = newQuantity;
+      
+      int existingIndex = cartItems.indexWhere((item) => (item['product'] as Product).id == product.id);
+      if (existingIndex != -1) {
+        if (newQuantity == 0) {
+          cartItems.removeAt(existingIndex);
+        } else {
+          cartItems[existingIndex]['quantity'] = newQuantity;
+        }
+      } else if (newQuantity > 0) {
+        cartItems.add({
+          'product': product,
+          'quantity': newQuantity,
+        });
+      }
+    });
+  }
+
+  void _updateSearchQuery(String query) {
     setState(() {
       searchQuery = query;
-    });
-    // Fetch filtered products based on search query
-    final filteredProducts = useRealApi
-        ? await apiService.searchMarketProductsFromApi(query)
-        : await apiService.searchMarketProducts(query);
-    setState(() {
-      allProducts = filteredProducts;
     });
   }
 
@@ -95,14 +154,7 @@ class _MarketScreenState extends State<MarketScreen> {
         actions: [
           IconButton(
             icon: Icon(Icons.shopping_cart),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CartScreen(cartItems: cartItems),
-                ),
-              );
-            },
+            onPressed: _navigateToCart,
           ),
         ],
       ),
@@ -113,7 +165,7 @@ class _MarketScreenState extends State<MarketScreen> {
             padding: EdgeInsets.all(16.0),
             child: TextField(
               decoration: InputDecoration(
-                hintText: 'search products...',
+                hintText: 'Search products...',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8.0),
@@ -123,35 +175,82 @@ class _MarketScreenState extends State<MarketScreen> {
             ),
           ),
 
-          // Category Tabs
+          // Price Filter
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildCategoryTab('Fruits'),
-                _buildCategoryTab('Vegetables'),
-                _buildCategoryTab('Grain'),
-                _buildCategoryTab('Tubers'),
+                Expanded(
+                  child: TextField(
+                    controller: minPriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Min Price',
+                      suffixText: 'Tsh',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                    ),
+                    onChanged: (value) => _fetchProducts(),
+                  ),
+                ),
+                SizedBox(width: 16.0),
+                Expanded(
+                  child: TextField(
+                    controller: maxPriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Max Price',
+                      suffixText: 'Tsh',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                    ),
+                    onChanged: (value) => _fetchProducts(),
+                  ),
+                ),
               ],
             ),
+          ),
+          SizedBox(height: 16.0),
+
+          // Category Tabs
+          FutureBuilder<List<Category>>(
+            future: categoriesFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              } else if (snapshot.hasData) {
+                final categories = snapshot.data!;
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      _buildCategoryTab(null, 'All'),
+                      ...categories.map((category) => _buildCategoryTab(category, category.name)),
+                    ],
+                  ),
+                );
+              }
+              return SizedBox.shrink();
+            },
           ),
           SizedBox(height: 10),
 
           // Products Grid
           Expanded(
-            child: FutureBuilder<List<MarketProduct>>(
-              future: marketProductsFuture,
+            child: FutureBuilder<List<Product>>(
+              future: productsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
                 } else if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));
-                } else {
-                  // Filter products by category
-                  final products = allProducts
-                      .where((product) => product.category == selectedCategory)
-                      .toList();
+                } else if (snapshot.hasData) {
+                  final products = snapshot.data!;
                   if (products.isEmpty) {
                     return Center(child: Text('No products found'));
                   }
@@ -163,87 +262,124 @@ class _MarketScreenState extends State<MarketScreen> {
                       mainAxisSpacing: 10,
                       childAspectRatio: 0.75,
                     ),
-                      itemCount: products.length,
+                    itemCount: products.length,
                     itemBuilder: (context, index) {
                       final product = products[index];
-                      return Card(
-                        elevation: 2,
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  image: DecorationImage(
-                                    image: NetworkImage(product.imageUrl),
-                                    fit: BoxFit.cover,
-                                    onError: (exception, stackTrace) {
-                                      print('Error loading image: $exception');
-                                    },
-                                  ),
-                                ),
-                              ),
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CropDetailScreen(product: product),
                             ),
-                            Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    product.name,
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                  ),
-                                  SizedBox(height: 5),
-                                  Text(
-                                    '${product.pricePerKg} Tsh',
-                                    style: TextStyle(fontSize: 14, color: Colors.green),
-                                  ),
-                                  SizedBox(height: 5),
-                                  IconButton(
-                                    icon: Icon(Icons.add_shopping_cart, color: Colors.green),
-                                    onPressed: () => _addToCart(product),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
+                        child: _buildProductCard(product),
                       );
                     },
                   );
                 }
+                return SizedBox.shrink();
               },
             ),
           ),
         ],
       ),
       bottomNavigationBar: BottomNavBar(
-        currentIndex: 1, // Market tab
+        currentIndex: 1,
         onTap: _onNavTap,
       ),
     );
   }
 
-  Widget _buildCategoryTab(String category) {
-    bool isSelected = selectedCategory == category;
+  Widget _buildCategoryTab(Category? category, String name) {
+    bool isSelected = selectedCategory?.id == category?.id;
     return GestureDetector(
       onTap: () {
         setState(() {
           selectedCategory = category;
+          _fetchProducts();
         });
       },
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        margin: EdgeInsets.only(right: 8.0),
         decoration: BoxDecoration(
           color: isSelected ? Colors.green : Colors.grey[200],
           borderRadius: BorderRadius.circular(20.0),
         ),
         child: Text(
-          category,
+          name,
           style: TextStyle(
             color: isSelected ? Colors.white : Colors.black,
             fontWeight: FontWeight.bold,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildProductCard(Product product) {
+    int quantity = productQuantities[product.id] ?? 0;
+    
+    return Card(
+      elevation: 2,
+      child: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8.0),
+                image: DecorationImage(
+                  image: NetworkImage(product.image),
+                  fit: BoxFit.cover,
+                  onError: (exception, stackTrace) {
+                    print('Error loading image: $exception');
+                  },
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Text(
+                  product.name,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  '${product.price.toStringAsFixed(2)} Tsh',
+                  style: TextStyle(fontSize: 14, color: Colors.green),
+                ),
+                SizedBox(height: 5),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.remove_circle_outline, color: Colors.green),
+                      onPressed: quantity > 0 
+                          ? () => _updateQuantity(product, quantity - 1)
+                          : null,
+                    ),
+                    Text(
+                      quantity.toString(),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.add_circle_outline, color: Colors.green),
+                      onPressed: () => _updateQuantity(product, quantity + 1),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

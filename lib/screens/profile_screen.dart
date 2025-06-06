@@ -12,6 +12,8 @@ import 'location_screen.dart';
 import 'saved_tips_screen.dart';
 import 'my_role_screen.dart';
 import 'login_screen.dart'; // Import LoginScreen
+import 'orders_screen.dart'; // Add import for OrdersScreen
+import 'my_consultations_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -21,7 +23,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final ApiService apiService = ApiService();
   late Future<User> userFuture;
-  final bool useRealApi = false;
+  final bool useRealApi = true;
 
   @override
   void initState() {
@@ -138,6 +140,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               user.username,
                               style: TextStyle(fontSize: 16, color: Colors.grey),
                             ),
+                            SizedBox(height: 5),
+                            Text(
+                              user.email,
+                              style: TextStyle(fontSize: 16, color: Colors.grey),
+                            ),
                           ],
                         ),
                       ),
@@ -209,6 +216,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => MyRoleScreen(role: user.role),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildProfileOption(
+                    icon: Icons.shopping_bag_outlined,
+                    label: 'My Orders',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => OrdersScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildProfileOption(
+                    icon: Icons.event_note,
+                    label: 'My Consultations',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MyConsultationsScreen(),
                         ),
                       );
                     },

@@ -11,26 +11,33 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final ApiService apiService = ApiService();
-  final bool useRealApi = false;
-  final _usernameController = TextEditingController();
+  final bool useRealApi = true;
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   void _login() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter both email and password')),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
     try {
       final auth = useRealApi
-          ? await apiService.loginFromApi(_usernameController.text, _passwordController.text)
-          : await apiService.login(_usernameController.text, _passwordController.text);
+          ? await apiService.loginFromApi(_emailController.text, _passwordController.text)
+          : await apiService.login(_emailController.text, _passwordController.text);
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => HomeScreen()),
@@ -114,14 +121,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 SizedBox(height: 40),
                 TextField(
-                  controller: _usernameController,
+                  controller: _emailController,
                   decoration: InputDecoration(
-                    labelText: 'enter username',
-                    prefixIcon: Icon(Icons.person),
+                    labelText: 'enter email',
+                    prefixIcon: Icon(Icons.email),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
                     ),
                   ),
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 SizedBox(height: 20),
                 TextField(

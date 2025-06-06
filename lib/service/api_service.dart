@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -12,11 +12,16 @@ import '../model/discussion_message_model.dart';
 import '../model/tip_model.dart';
 import '../model/user_model.dart';
 import '../model/auth_model.dart';
+import '../model/product_model.dart' as product_model;
 import 'package:geolocator/geolocator.dart';
+import 'auth_storage_service.dart';
+import '../model/order_model.dart';
+import '../model/consultation_model.dart';
 
 class ApiService {
   final String baseUrl = dotenv.env['BASE_URL'] ?? 'https://api.farmapp.com';
   final String weatherApiKey = dotenv.env['OPENWEATHERMAP_API_KEY'] ?? '';
+  final AuthStorageService _authStorage = AuthStorageService();
 
   // Check and request location permissions
   Future<bool> _checkAndRequestLocationPermissions() async {
@@ -196,6 +201,7 @@ class ApiService {
     await Future.delayed(Duration(seconds: 1));
     return [
       Expert(
+        id: 1,
         name: 'Dr. Hassan',
         specialty: 'Soil & irrigation',
         imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcQfu9dg1a4_gBzTvbgr9PpXcfOg21fza4eQ9Q&s',
@@ -206,6 +212,7 @@ class ApiService {
         ],
       ),
       Expert(
+        id: 2,
         name: 'Dr. Kimario',
         specialty: 'Plant pathologist',
         imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcQYUfzzk_t4C8F-NoPQJVW8aaQs3Y6m_5VP1g&s',
@@ -216,6 +223,7 @@ class ApiService {
         ],
       ),
       Expert(
+        id: 3,
         name: 'Dr. Amina',
         specialty: 'Crop nutrition',
         imageUrl: 'https://thumbs.dreamstime.com/b/science-portrait-woman-plants-microscope-laboratory-research-agriculture-sustainability-leaves-test-scientist-african-287575186.jpg',
@@ -260,7 +268,7 @@ class ApiService {
       ),
       DiscussionMessage(
         userName: 'Joel',
-        content: 'Yes, I’ve used neem oil with great success. What pests are you dealing with?',
+        content: 'Yes Ive used neem oil with great success. What pests are you dealing with?',
       ),
       DiscussionMessage(
         userName: 'Amina',
@@ -306,13 +314,25 @@ class ApiService {
 
   Future<String> uploadUserImageFromApi(File image) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/user/upload-image'));
+      final headers = await _getAuthHeaders();
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/user/image'));
+      
+      // Add auth header to multipart request
+      request.headers.addAll({
+        'Authorization': headers['Authorization'] ?? '',
+      });
+      
       request.files.add(await http.MultipartFile.fromPath('image', image.path));
-      final response = await request.send();
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
       if (response.statusCode == 200) {
-        final responseData = await response.stream.bytesToString();
-        final data = jsonDecode(responseData);
-        return data['imageUrl'];
+        final data = jsonDecode(response.body);
+        return data['image_url'] ?? '';
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
       } else {
         throw Exception('Failed to upload image: ${response.statusCode}');
       }
@@ -326,6 +346,7 @@ class ApiService {
     return User(
       name: 'Yusuph Paul',
       username: '@yusuphpaul',
+      email: 'yusuph.paul@example.com',
       imageUrl: 'https://t3.ftcdn.net/jpg/04/32/15/18/360_F_432151892_oQ3YQDo2LYZPILlEMnlo55PjjgiUwnQb.jpg',
       favorites: ['Maize', 'Tomatoes', 'Bananas'],
       location: 'Kilimanjaro, Tanzania',
@@ -335,71 +356,6 @@ class ApiService {
       ],
       role: 'Farmer',
     );
-  }
-
-  Future<User> fetchUserFromApi() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/user/profile'));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return User.fromJson(data);
-      } else {
-        throw Exception('Failed to load user profile: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error fetching user profile: $e');
-    }
-  }
-
-  Future<bool> updateUserProfile(String name, String username, String imageUrl, String location, String role) async {
-    await Future.delayed(Duration(seconds: 1));
-    print('Mock API: User profile updated - Name: $name, Username: $username, Image: $imageUrl, Location: $location, Role: $role');
-    return true;
-  }
-
-  Future<bool> updateUserProfileFromApi(String name, String username, String imageUrl, String location, String role) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/user/profile'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': name,
-          'username': username,
-          'imageUrl': imageUrl,
-          'location': location,
-          'role': role,
-        }),
-      );
-      if (response.statusCode == 200) {
-        return true;
-      } else {
-        throw Exception('Failed to update user profile: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error updating user profile: $e');
-    }
-  }
-
-  Future<bool> logout() async {
-    await Future.delayed(Duration(seconds: 1));
-    print('Mock API: User logged out');
-    return true;
-  }
-
-  Future<bool> logoutFromApi() async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/logout'),
-        headers: {'Content-Type': 'application/json'},
-      );
-      if (response.statusCode == 200) {
-        return true;
-      } else {
-        throw Exception('Failed to logout: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error logging out: $e');
-    }
   }
 
   Future<Auth> login(String username, String password) async {
@@ -414,24 +370,73 @@ class ApiService {
     }
   }
 
-  Future<Auth> loginFromApi(String username, String password) async {
+  Future<Auth> loginFromApi(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/auth/login'),
+        Uri.parse('$baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'username': username,
+          'email': email,
           'password': password,
         }),
       );
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return Auth.fromJson(data);
+        final token = data['token'];
+        final userId = data['user']['id'].toString();
+        final role = data['user']['role'] ?? 'farmer';
+
+        // Store auth data
+        await _authStorage.saveAuthData(
+          token: token,
+          userId: userId,
+          role: role,
+        );
+
+        return Auth(
+          token: token,
+          userId: userId,
+        );
+      } else if (response.statusCode == 401) {
+        throw Exception('Invalid credentials');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
       } else {
         throw Exception('Failed to login: ${response.statusCode}');
       }
     } catch (e) {
       throw Exception('Error logging in: $e');
+    }
+  }
+
+  Future<bool> logout() async {
+    await Future.delayed(Duration(seconds: 1));
+    print('Mock API: User logged out');
+    return true;
+  }
+
+  Future<bool> logoutFromApi() async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/logout'),
+        headers: headers,
+      );
+      
+      // Clear local auth data regardless of API response
+      await _authStorage.clearAuthData();
+      
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        throw Exception('Failed to logout: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Still clear local auth data even if API call fails
+      await _authStorage.clearAuthData();
+      throw Exception('Error logging out: $e');
     }
   }
 
@@ -445,20 +450,25 @@ class ApiService {
     }
   }
 
-  Future<bool> signupFromApi(String fullName, String phoneNumber, String email, String password) async {
+  Future<bool> signupFromApi(String name, String phoneNumber, String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/auth/signup'),
+        Uri.parse('$baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'fullName': fullName,
-          'phoneNumber': phoneNumber,
+          'name': name,
+          'phone_number': phoneNumber,
           'email': email,
           'password': password,
+          'role': 'farmer', // Default role for new users
         }),
       );
+
       if (response.statusCode == 201) {
         return true;
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
       } else {
         throw Exception('Failed to signup: ${response.statusCode}');
       }
@@ -632,10 +642,14 @@ class ApiService {
 
   Future<List<Expert>> fetchExpertsFromApi() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/experts'));
+      final response = await http.get(
+        Uri.parse('$baseUrl/experts'),
+      );
+
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => Expert.fromJson(json)).toList();
+        final data = jsonDecode(response.body);
+        final List<dynamic> expertsJson = data['experts'];
+        return expertsJson.map((json) => Expert.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load experts: ${response.statusCode}');
       }
@@ -671,27 +685,6 @@ class ApiService {
     await Future.delayed(Duration(seconds: 1));
     print('Mock API: Consultation booked with $expertName on $date at $time');
     return true;
-  }
-
-  Future<bool> bookConsultationFromApi(String expertName, String date, String time) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/experts/consultations'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'expertName': expertName,
-          'date': date,
-          'time': time,
-        }),
-      );
-      if (response.statusCode == 200) {
-        return true;
-      } else {
-        throw Exception('Failed to book consultation: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error booking consultation: $e');
-    }
   }
 
   Future<List<SuccessStory>> fetchSuccessStoriesFromApi() async {
@@ -754,6 +747,323 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Error sending discussion message: $e');
+    }
+  }
+
+  // Helper method to get auth headers
+  Future<Map<String, String>> _getAuthHeaders() async {
+    final token = await _authStorage.getToken();
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  Future<User> fetchUserFromApi() async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/profile'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final userJson = data['user'];
+        // Get image base URL from .env
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        // Prepend base URL to image_url if present and not already a full URL
+        if (userJson['image_url'] != null && userJson['image_url'] != '') {
+          userJson['imageUrl'] = imageBaseUrl + userJson['image_url'];
+        } else {
+          userJson['imageUrl'] = '';
+        }
+        return User.fromJson(userJson);
+      } else {
+        throw Exception('Failed to load user profile: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching user profile: $e');
+    }
+  }
+
+  Future<bool> updateUserProfileFromApi(String name, String username, String imageUrl, String location, String role) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final Map<String, dynamic> body = {};
+
+      if (name.isNotEmpty) body['name'] = name;
+      if (username.isNotEmpty) body['username'] = username;
+      if (imageUrl.isNotEmpty) body['image_url'] = imageUrl;
+      if (location.isNotEmpty) body['location'] = location;
+      // Do NOT send 'role'
+
+      final response = await http.patch(
+        Uri.parse('$baseUrl/user'),
+        headers: headers,
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to update profile: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error updating profile: $e');
+    }
+  }
+
+  Future<List<product_model.Product>> fetchFeaturedProductsFromApi() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/products/featured'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> productsJson = data['products'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        return productsJson.map((json) {
+          // Prepend base URL to image path
+          if (json['image'] != null && json['image'].toString().isNotEmpty) {
+            json['image'] = imageBaseUrl + json['image'];
+          }
+          return product_model.Product.fromJson(json);
+        }).toList();
+      } else {
+        throw Exception('Failed to load featured products: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching featured products: $e');
+    }
+  }
+
+  Future<List<product_model.Category>> fetchCategoriesFromApi() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/categories'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> categoriesJson = data['categories'];
+        return categoriesJson.map((json) => product_model.Category.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load categories: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching categories: $e');
+    }
+  }
+
+  Future<List<product_model.Product>> fetchProductsFromApi({
+    int? categoryId,
+    double? minPrice,
+    double? maxPrice,
+    String? createdAfter,
+    String? createdBefore,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (categoryId != null) queryParams['category_id'] = categoryId.toString();
+      if (minPrice != null) queryParams['min_price'] = minPrice.toString();
+      if (maxPrice != null) queryParams['max_price'] = maxPrice.toString();
+      if (createdAfter != null) queryParams['created_after'] = createdAfter;
+      if (createdBefore != null) queryParams['created_before'] = createdBefore;
+
+      final uri = Uri.parse('$baseUrl/products').replace(queryParameters: queryParams);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> productsJson = data['products'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        return productsJson.map((json) {
+          // Prepend base URL to image path
+          if (json['image'] != null && json['image'].toString().isNotEmpty) {
+            json['image'] = imageBaseUrl + json['image'];
+          }
+          return product_model.Product.fromJson(json);
+        }).toList();
+      } else {
+        throw Exception('Failed to load products: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching products: $e');
+    }
+  }
+
+  Future<Order> createOrderFromApi({
+    required List<Map<String, dynamic>> items,
+    required String shippingAddress,
+    required String phoneNumber,
+    String? notes,
+  }) async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/orders'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'items': items.map((item) => {
+            'product_id': (item['product'] as product_model.Product).id,
+            'quantity': item['quantity'],
+          }).toList(),
+          'shipping_address': shippingAddress,
+          'phone_number': phoneNumber,
+          if (notes != null) 'notes': notes,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return Order.fromJson(data['order']);
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to create order');
+      }
+    } catch (e) {
+      throw Exception('Error creating order: $e');
+    }
+  }
+
+  Future<List<Order>> fetchMyOrdersFromApi() async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/orders/my-orders'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['orders'] as List)
+            .map((order) => Order.fromJson(order))
+            .toList();
+      } else {
+        throw Exception('Failed to fetch orders');
+      }
+    } catch (e) {
+      throw Exception('Error fetching orders: $e');
+    }
+  }
+
+  Future<Order> fetchOrderDetailsFromApi(int orderId) async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/orders/$orderId'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return Order.fromJson(data['order']);
+      } else if (response.statusCode == 404) {
+        throw Exception('Order not found');
+      } else if (response.statusCode == 403) {
+        throw Exception('Unauthorized to view this order');
+      } else {
+        throw Exception('Failed to fetch order details');
+      }
+    } catch (e) {
+      throw Exception('Error fetching order details: $e');
+    }
+  }
+
+  Future<Consultation> bookConsultationFromApi({
+    required int expertId,
+    required DateTime consultationDate,
+    required String description,
+  }) async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/consultations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'expert_id': expertId,
+          'consultation_date': consultationDate.toIso8601String(),
+          'description': description,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return Consultation.fromJson(data['consultation']);
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to book consultation: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error booking consultation: $e');
+    }
+  }
+
+  Future<List<Consultation>> fetchMyConsultationsFromApi() async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/consultations/my-bookings'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['consultations'] as List)
+            .map((consultation) => Consultation.fromJson(consultation))
+            .toList();
+      } else {
+        throw Exception('Failed to fetch consultations: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching consultations: $e');
     }
   }
 }
