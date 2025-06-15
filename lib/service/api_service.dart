@@ -17,6 +17,7 @@ import 'package:geolocator/geolocator.dart';
 import 'auth_storage_service.dart';
 import '../model/order_model.dart';
 import '../model/consultation_model.dart';
+import '../model/tip_category_model.dart';
 
 class ApiService {
   final String baseUrl = dotenv.env['BASE_URL'] ?? 'https://api.farmapp.com';
@@ -197,44 +198,7 @@ class ApiService {
         .toList();
   }
 
-  Future<List<Expert>> fetchExperts() async {
-    await Future.delayed(Duration(seconds: 1));
-    return [
-      Expert(
-        id: 1,
-        name: 'Dr. Hassan',
-        specialty: 'Soil & irrigation',
-        imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcQfu9dg1a4_gBzTvbgr9PpXcfOg21fza4eQ9Q&s',
-        tips: [
-          'Test soil pH regularly to ensure optimal nutrient availability.',
-          'Use drip irrigation to conserve water and reduce runoff.',
-          'Rotate crops to prevent soil depletion.',
-        ],
-      ),
-      Expert(
-        id: 2,
-        name: 'Dr. Kimario',
-        specialty: 'Plant pathologist',
-        imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcQYUfzzk_t4C8F-NoPQJVW8aaQs3Y6m_5VP1g&s',
-        tips: [
-          'Inspect plants regularly for early signs of disease.',
-          'Use resistant crop varieties to minimize disease risk.',
-          'Ensure proper spacing between plants for air circulation.',
-        ],
-      ),
-      Expert(
-        id: 3,
-        name: 'Dr. Amina',
-        specialty: 'Crop nutrition',
-        imageUrl: 'https://thumbs.dreamstime.com/b/science-portrait-woman-plants-microscope-laboratory-research-agriculture-sustainability-leaves-test-scientist-african-287575186.jpg',
-        tips: [
-          'Apply organic compost to improve soil fertility.',
-          'Monitor nitrogen levels to prevent over-fertilization.',
-          'Use foliar feeding for quick nutrient uptake.',
-        ],
-      ),
-    ];
-  }
+ 
 
   Future<List<SuccessStory>> fetchSuccessStories() async {
     await Future.delayed(Duration(seconds: 1));
@@ -286,16 +250,76 @@ class ApiService {
     await Future.delayed(Duration(seconds: 1));
     return [
       Tip(
-        userName: 'Joel',
+        id: 1,
+        userId: 1,
+        categoryId: 1,
+        title: 'Use mulch to retain soil moisture',
+        slug: 'use-mulch-to-retain-soil-moisture',
         content: 'Use mulch to retain soil moisture during dry seasons.',
+        isFeatured: true,
+        viewsCount: 100,
+        likesCount: 50,
+        tags: ['soil', 'moisture', 'mulch'],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        likedByCount: 50,
+        savedByCount: 30,
+        category: TipCategory(
+          id: 1,
+          name: 'Soil Management',
+          slug: 'soil-management',
+          description: 'Tips for managing soil health',
+          icon: 'soil',
+          tipsCount: 10,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        user: User(
+          name: 'Joel',
+          username: '@joel',
+          email: 'joel@example.com',
+          imageUrl: 'https://example.com/joel.jpg',
+          favorites: [],
+          location: 'Kilimanjaro',
+          savedTips: [],
+          role: 'expert',
+        ),
       ),
       Tip(
-        userName: 'Amina',
+        id: 2,
+        userId: 2,
+        categoryId: 2,
+        title: 'Plant marigolds for pest control',
+        slug: 'plant-marigolds-for-pest-control',
         content: 'Plant marigolds near your crops to deter pests naturally.',
-      ),
-      Tip(
-        userName: 'Hassan',
-        content: 'Compost kitchen scraps to create nutrient-rich fertilizer.',
+        isFeatured: false,
+        viewsCount: 80,
+        likesCount: 40,
+        tags: ['pests', 'flowers', 'natural'],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        likedByCount: 40,
+        savedByCount: 20,
+        category: TipCategory(
+          id: 2,
+          name: 'Pest Control',
+          slug: 'pest-control',
+          description: 'Natural pest control methods',
+          icon: 'pest',
+          tipsCount: 8,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        user: User(
+          name: 'Amina',
+          username: '@amina',
+          email: 'amina@example.com',
+          imageUrl: 'https://example.com/amina.jpg',
+          favorites: [],
+          location: 'Arusha',
+          savedTips: [],
+          role: 'expert',
+        ),
       ),
     ];
   }
@@ -365,7 +389,7 @@ class ApiService {
         token: 'mock_token_${username}',
         userId: 'mock_user_id_${username}',
       );
-    } else {
+      } else {
       throw Exception('Invalid username or password');
     }
   }
@@ -421,7 +445,7 @@ class ApiService {
     try {
       final headers = await _getAuthHeaders();
       final response = await http.post(
-        Uri.parse('$baseUrl/auth/logout'),
+        Uri.parse('$baseUrl/api/logout'),
         headers: headers,
       );
       
@@ -549,17 +573,37 @@ class ApiService {
     ];
   }
 
-  Future<List<String>> fetchSavedTipsFromApi() async {
+  Future<Map<String, dynamic>> fetchSavedTipsFromApi() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/user/saved-tips'));
+      final response = await http.get(
+        Uri.parse('$baseUrl/tips/saved'),
+        headers: await _getAuthHeaders(),
+      );
+
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.cast<String>();
+        final data = json.decode(response.body);
+        final tipsData = data['tips'];
+        
+        if (tipsData == null) {
+          return {
+            'tips': {
+              'data': [],
+              'current_page': 1,
+              'last_page': 1,
+              'per_page': 10,
+              'total': 0,
+            }
+          };
+        }
+        
+        return {
+          'tips': tipsData,
+        };
       } else {
-        throw Exception('Failed to load saved tips: ${response.statusCode}');
+        throw Exception('Failed to load saved tips: ${response.body}');
       }
     } catch (e) {
-      throw Exception('Error fetching saved tips: $e');
+      throw Exception('Failed to load saved tips: $e');
     }
   }
 
@@ -715,7 +759,7 @@ class ApiService {
     }
   }
 
-  Future<List<Tip>> fetchTipsFromApi() async {
+  Future<List<Tip>> fetchTipsListFromApi() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/community/tips'));
       if (response.statusCode == 200) {
@@ -1054,8 +1098,19 @@ class ApiService {
         },
       );
 
+      print('Farmer consultations response status: ${response.statusCode}');
+      print('Farmer consultations response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('Farmer consultations data structure: $data');
+        print('Consultations list type: ${data['consultations'].runtimeType}');
+        print('Consultations list length: ${(data['consultations'] as List).length}');
+        
+        if ((data['consultations'] as List).isNotEmpty) {
+          print('First consultation: ${(data['consultations'] as List).first}');
+        }
+        
         return (data['consultations'] as List)
             .map((consultation) => Consultation.fromJson(consultation))
             .toList();
@@ -1063,7 +1118,385 @@ class ApiService {
         throw Exception('Failed to fetch consultations: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error in fetchMyConsultationsFromApi: $e');
       throw Exception('Error fetching consultations: $e');
+    }
+  }
+
+  Future<List<Consultation>> fetchMyExpertConsultationsFromApi() async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/consultations/my-expert-bookings'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('Expert consultations response status: ${response.statusCode}');
+      print('Expert consultations response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Expert consultations data structure: $data');
+        print('Consultations list type: ${data['consultations'].runtimeType}');
+        print('Consultations list length: ${(data['consultations'] as List).length}');
+        
+        if ((data['consultations'] as List).isNotEmpty) {
+          print('First consultation: ${(data['consultations'] as List).first}');
+        }
+        
+        return (data['consultations'] as List)
+            .map((consultation) => Consultation.fromJson(consultation))
+            .toList();
+      } else {
+        throw Exception('Failed to fetch expert consultations: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in fetchMyExpertConsultationsFromApi: $e');
+      throw Exception('Error fetching expert consultations: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> acceptConsultationFromApi(int consultationId, {String? expertNotes}) async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.patch(
+        Uri.parse('$baseUrl/consultations/$consultationId/accept'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          if (expertNotes != null && expertNotes.isNotEmpty) 'expert_notes': expertNotes,
+        }),
+      );
+
+      print('Accept consultation response status: ${response.statusCode}');
+      print('Accept consultation response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'message': data['message'] ?? 'Consultation accepted successfully',
+          'consultation': data['consultation'],
+        };
+      } else if (response.statusCode == 403) {
+        throw Exception('Unauthorized to accept this consultation');
+      } else if (response.statusCode == 404) {
+        throw Exception('Consultation not found');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Consultation is not in pending status');
+      } else {
+        throw Exception('Failed to accept consultation: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in acceptConsultationFromApi: $e');
+      throw Exception('Error accepting consultation: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> declineConsultationFromApi(int consultationId, String declineReason) async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.patch(
+        Uri.parse('$baseUrl/consultations/$consultationId/decline'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'decline_reason': declineReason,
+        }),
+      );
+
+      print('Decline consultation response status: ${response.statusCode}');
+      print('Decline consultation response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'message': data['message'] ?? 'Consultation declined successfully',
+          'consultation': data['consultation'],
+        };
+      } else if (response.statusCode == 403) {
+        throw Exception('Unauthorized to decline this consultation');
+      } else if (response.statusCode == 404) {
+        throw Exception('Consultation not found');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        if (data['errors'] != null) {
+          final errors = data['errors'] as Map<String, dynamic>;
+          final errorMessage = errors.values.first?.first ?? 'Validation failed';
+          throw Exception(errorMessage);
+        } else {
+          throw Exception(data['message'] ?? 'Consultation is not in pending status');
+        }
+      } else {
+        throw Exception('Failed to decline consultation: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in declineConsultationFromApi: $e');
+      throw Exception('Error declining consultation: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> completeConsultationFromApi(int consultationId) async {
+    try {
+      final token = await _authStorage.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.patch(
+        Uri.parse('$baseUrl/consultations/$consultationId/complete'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('Complete consultation response status: ${response.statusCode}');
+      print('Complete consultation response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'message': data['message'] ?? 'Consultation marked as completed',
+          'consultation': data['consultation'],
+        };
+      } else if (response.statusCode == 403) {
+        throw Exception('Unauthorized to complete this consultation');
+      } else if (response.statusCode == 404) {
+        throw Exception('Consultation not found');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Consultation must be accepted before completing');
+      } else {
+        throw Exception('Failed to complete consultation: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in completeConsultationFromApi: $e');
+      throw Exception('Error completing consultation: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchTipCategoriesFromApi() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/tip-categories'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> categoriesJson = data['categories'];
+        return {
+          'categories': categoriesJson.map((json) => TipCategory.fromJson(json)).toList(),
+          'totalCategories': data['total_categories'] ?? 0,
+          'totalTips': data['total_tips'] ?? 0,
+        };
+      } else {
+        throw Exception('Failed to load tip categories: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching tip categories: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchTipsFromApi({
+    int? categoryId,
+    String? search,
+    bool? featured,
+    String? sort,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (categoryId != null) queryParams['category'] = categoryId.toString();
+      if (search != null) queryParams['search'] = search;
+      if (featured != null) queryParams['featured'] = featured.toString();
+      if (sort != null) queryParams['sort'] = sort;
+
+      final uri = Uri.parse('$baseUrl/tips').replace(queryParameters: queryParams);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final tipsData = data['tips'];
+        return {
+          'tips': (tipsData['data'] as List).map((json) => Tip.fromJson(json)).toList(),
+          'currentPage': tipsData['current_page'] ?? 1,
+          'lastPage': tipsData['last_page'] ?? 1,
+          'perPage': tipsData['per_page'] ?? 10,
+          'total': tipsData['total'] ?? 0,
+        };
+      } else {
+        throw Exception('Failed to load tips: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching tips: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> toggleTipLike(int tipId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/tips/$tipId/like'),
+        headers: await _getAuthHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final message = data['message'] as String;
+        return {
+          'message': message,
+          'likesCount': data['likes_count'] as int,
+          'isLiked': message.contains('liked') && !message.contains('unliked'),
+        };
+      } else {
+        throw Exception('Failed to toggle like: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Failed to toggle like: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> toggleTipSave(int tipId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/tips/$tipId/save'),
+        headers: await _getAuthHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final message = data['message'] as String;
+        return {
+          'message': message,
+          'isSaved': message.contains('saved') && !message.contains('unsaved'),
+        };
+      } else {
+        throw Exception('Failed to toggle save: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Failed to toggle save: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> createProductFromApi({
+    required String name,
+    required String description,
+    required double price,
+    required int categoryId,
+    required File image,
+    int? stock,
+    String? location,
+    bool? isFeatured,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      // Remove Content-Type for multipart request
+      headers.remove('Content-Type');
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/products'));
+      
+      // Add auth header
+      request.headers.addAll({
+        'Authorization': headers['Authorization'] ?? '',
+      });
+      
+      // Add text fields
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['price'] = price.toString();
+      request.fields['category_id'] = categoryId.toString();
+      
+      if (stock != null) {
+        request.fields['stock'] = stock.toString();
+      }
+      if (location != null && location.isNotEmpty) {
+        request.fields['location'] = location;
+      }
+      if (isFeatured != null) {
+        request.fields['is_featured'] = isFeatured.toString();
+      }
+      
+      // Add image file
+      request.files.add(await http.MultipartFile.fromPath('image', image.path));
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return {
+          'message': data['message'] ?? 'Product created successfully',
+          'product': data['product'],
+        };
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to create product: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error creating product: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> createTipFromApi({
+    required String title,
+    required String content,
+    required int categoryId,
+    List<String>? tags,
+    bool? isFeatured,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/tips'),
+        headers: headers,
+        body: jsonEncode({
+          'title': title,
+          'content': content,
+          'category_id': categoryId,
+          if (tags != null && tags.isNotEmpty) 'tags': tags,
+          if (isFeatured != null) 'is_featured': isFeatured,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return {
+          'message': data['message'] ?? 'Tip created successfully',
+          'tip': data['tip'],
+        };
+      } else if (response.statusCode == 403) {
+        throw Exception('Only experts can create tips');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to create tip: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error creating tip: $e');
     }
   }
 }
