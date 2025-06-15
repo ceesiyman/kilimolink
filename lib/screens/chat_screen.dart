@@ -48,13 +48,7 @@ class _ChatScreenState extends State<ChatScreen> {
               height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                image: DecorationImage(
-                  image: NetworkImage(widget.expert.imageUrl),
-                  fit: BoxFit.cover,
-                  onError: (exception, stackTrace) {
-                    print('Error loading image: $exception');
-                  },
-                ),
+                
               ),
             ),
             SizedBox(width: 10),
