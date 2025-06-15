@@ -1480,23 +1480,37 @@ class ApiService {
       if (sort != null) queryParams['sort'] = sort;
 
       final uri = Uri.parse('$baseUrl/success-stories').replace(queryParameters: queryParams);
+      print('Fetching success stories from: $uri');
+      
       final response = await http.get(uri);
+      print('Success stories response status: ${response.statusCode}');
+      print('Success stories response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('Success stories data structure: $data');
+        
         final List<dynamic> storiesJson = data['stories']['data'];
         final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
         
+        print('Found ${storiesJson.length} success stories');
+        
         final stories = storiesJson.map((json) {
-          // Prepend base URL to image paths
-          if (json['images'] != null) {
-            for (var image in json['images']) {
-              if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
-                image['image_path'] = imageBaseUrl + image['image_path'];
+          try {
+            // Prepend base URL to image paths
+            if (json['images'] != null) {
+              for (var image in json['images']) {
+                if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
+                  image['image_path'] = imageBaseUrl + image['image_path'];
+                }
               }
             }
+            return SuccessStory.fromJson(json);
+          } catch (e) {
+            print('Error parsing success story JSON: $e');
+            print('Problematic JSON: $json');
+            rethrow;
           }
-          return SuccessStory.fromJson(json);
         }).toList();
 
         return {
@@ -1504,9 +1518,11 @@ class ApiService {
           'pagination': data['stories'],
         };
       } else {
+        print('Failed to load success stories: ${response.statusCode} - ${response.body}');
         throw Exception('Failed to load success stories: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error fetching success stories: $e');
       throw Exception('Error fetching success stories: $e');
     }
   }
@@ -1526,6 +1542,28 @@ class ApiService {
           for (var image in storyJson['images']) {
             if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
               image['image_path'] = imageBaseUrl + image['image_path'];
+            }
+          }
+        }
+        
+        // Prepend base URL to user image paths
+        if (storyJson['user']['image_url'] != null && storyJson['user']['image_url'].toString().isNotEmpty) {
+          storyJson['user']['imageUrl'] = imageBaseUrl + storyJson['user']['image_url'];
+        }
+        
+        // Prepend base URL to comment user image paths
+        if (storyJson['comments'] != null) {
+          for (var comment in storyJson['comments']) {
+            if (comment['user']['image_url'] != null && comment['user']['image_url'].toString().isNotEmpty) {
+              comment['user']['imageUrl'] = imageBaseUrl + comment['user']['image_url'];
+            }
+            // Handle replies
+            if (comment['replies'] != null) {
+              for (var reply in comment['replies']) {
+                if (reply['user']['image_url'] != null && reply['user']['image_url'].toString().isNotEmpty) {
+                  reply['user']['imageUrl'] = imageBaseUrl + reply['user']['image_url'];
+                }
+              }
             }
           }
         }
@@ -1552,6 +1590,7 @@ class ApiService {
     List<Map<String, dynamic>>? images,
   }) async {
     try {
+      print('Creating success story with title: $title');
       final headers = await _getAuthHeaders();
       
       // Remove Content-Type for multipart request
@@ -1573,8 +1612,11 @@ class ApiService {
       if (yieldImprovement != null) request.fields['yield_improvement'] = yieldImprovement.toString();
       if (yieldUnit != null) request.fields['yield_unit'] = yieldUnit;
       
+      print('Request fields: ${request.fields}');
+      
       // Add images
       if (images != null) {
+        print('Adding ${images.length} images to request');
         for (int i = 0; i < images.length; i++) {
           final imageData = images[i];
           if (imageData['file'] != null) {
@@ -1593,6 +1635,9 @@ class ApiService {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
+      print('Create success story response status: ${response.statusCode}');
+      print('Create success story response body: ${response.body}');
+
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
         final storyJson = data['story'];
@@ -1607,14 +1652,18 @@ class ApiService {
           }
         }
         
+        print('Success story created successfully');
         return SuccessStory.fromJson(storyJson);
       } else if (response.statusCode == 422) {
         final data = jsonDecode(response.body);
+        print('Validation error: $data');
         throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
       } else {
+        print('Failed to create success story: ${response.statusCode} - ${response.body}');
         throw Exception('Failed to create success story: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error creating success story: $e');
       throw Exception('Error creating success story: $e');
     }
   }

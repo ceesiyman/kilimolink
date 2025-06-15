@@ -11,6 +11,8 @@ import 'market_screen.dart';
 import 'expert_screen.dart';
 import 'community_screen.dart';
 import 'profile_screen.dart';
+import 'create_success_story_screen.dart';
+import 'success_story_detail_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
@@ -46,6 +48,10 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      // Force rebuild when tab changes to update floating action button
+      setState(() {});
+    });
     _loadSuccessStories();
     discussionMessagesFuture = apiService.fetchDiscussionMessagesFromApi();
     categoriesFuture = apiService.fetchTipCategoriesFromApi();
@@ -69,7 +75,16 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
         cropType: selectedCropType,
         featured: showFeaturedStories ? true : null,
         sort: storySortBy,
-      );
+      ).catchError((error) {
+        print('Error loading success stories: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading success stories: $error')),
+        );
+        return {
+          'stories': <SuccessStory>[],
+          'pagination': {},
+        };
+      });
     });
   }
 
@@ -161,146 +176,6 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
     });
   }
 
-  Future<void> _createSuccessStory() async {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    final locationController = TextEditingController();
-    final cropTypeController = TextEditingController();
-    final yieldController = TextEditingController();
-    final yieldUnitController = TextEditingController();
-    List<Map<String, dynamic>> selectedImages = [];
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Create Success Story'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(
-                  labelText: 'Title *',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: contentController,
-                decoration: InputDecoration(
-                  labelText: 'Content *',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: locationController,
-                decoration: InputDecoration(
-                  labelText: 'Location',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: cropTypeController,
-                decoration: InputDecoration(
-                  labelText: 'Crop Type',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: yieldController,
-                      decoration: InputDecoration(
-                        labelText: 'Yield Improvement',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: yieldUnitController,
-                      decoration: InputDecoration(
-                        labelText: 'Unit (kg, tons, etc.)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 10),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
-                  if (image != null) {
-                    final file = File(image.path);
-                    final bytes = await file.readAsBytes();
-                    selectedImages.add({
-                      'file': bytes,
-                      'filename': image.name,
-                      'caption': '',
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Image added')),
-                    );
-                  }
-                },
-                icon: Icon(Icons.add_photo_alternate),
-                label: Text('Add Images'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleController.text.isEmpty || contentController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Title and content are required')),
-                );
-                return;
-              }
-
-              try {
-                await apiService.createSuccessStoryFromApi(
-                  title: titleController.text,
-                  content: contentController.text,
-                  location: locationController.text.isEmpty ? null : locationController.text,
-                  cropType: cropTypeController.text.isEmpty ? null : cropTypeController.text,
-                  yieldImprovement: yieldController.text.isEmpty ? null : double.tryParse(yieldController.text),
-                  yieldUnit: yieldUnitController.text.isEmpty ? null : yieldUnitController.text,
-                  images: selectedImages.isEmpty ? null : selectedImages,
-                );
-
-                Navigator.pop(context);
-                _loadSuccessStories();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Success story created successfully')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error creating story: $e')),
-                );
-              }
-            },
-            child: Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _toggleStoryLike(SuccessStory story) async {
     try {
       final response = await apiService.toggleSuccessStoryLikeFromApi(story.id);
@@ -313,54 +188,6 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
         SnackBar(content: Text('Error toggling like: $e')),
       );
     }
-  }
-
-  Future<void> _addComment(SuccessStory story) async {
-    final commentController = TextEditingController();
-    
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add Comment'),
-        content: TextField(
-          controller: commentController,
-          decoration: InputDecoration(
-            labelText: 'Comment',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (commentController.text.isEmpty) return;
-
-              try {
-                await apiService.addSuccessStoryCommentFromApi(
-                  storyId: story.id,
-                  comment: commentController.text,
-                );
-
-                Navigator.pop(context);
-                _loadSuccessStories();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Comment added successfully')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error adding comment: $e')),
-                );
-              }
-            },
-            child: Text('Add'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -476,11 +303,11 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
               // Success Stories List
               Expanded(
                 child: FutureBuilder<Map<String, dynamic>>(
-                  future: successStoriesFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasError) {
+            future: successStoriesFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
                       return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -494,7 +321,7 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                           ],
                         ),
                       );
-                    } else if (snapshot.hasData) {
+              } else if (snapshot.hasData) {
                       final stories = snapshot.data!['stories'] as List<SuccessStory>;
                       if (stories.isEmpty) {
                         return Center(
@@ -525,153 +352,228 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                           return Future.value();
                         },
                         child: ListView.builder(
-                          padding: EdgeInsets.all(16.0),
-                          itemCount: stories.length,
-                          itemBuilder: (context, index) {
-                            final story = stories[index];
-                            return Card(
-                              elevation: 2,
-                              margin: EdgeInsets.symmetric(vertical: 8.0),
-                              child: Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        CircleAvatar(
-                                          backgroundImage: NetworkImage(story.user.imageUrl),
-                                          onBackgroundImageError: (_, __) {},
-                                        ),
-                                        SizedBox(width: 10),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              story.user.name,
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            if (story.location != null)
-                                              Text(
-                                                story.location!,
+                  padding: EdgeInsets.all(16.0),
+                  itemCount: stories.length,
+                  itemBuilder: (context, index) {
+                    final story = stories[index];
+                    return Card(
+                      elevation: 2,
+                      margin: EdgeInsets.symmetric(vertical: 8.0),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => SuccessStoryDetailScreen(story: story),
+                                    ),
+                                  ).then((_) {
+                                    // Refresh the stories when returning from detail screen
+                                    setState(() {
+                                      _loadSuccessStories();
+                                    });
+                                  });
+                                },
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            backgroundImage: story.user.imageUrl.isNotEmpty
+                                                ? NetworkImage(story.user.imageUrl)
+                                                : null,
+                                            onBackgroundImageError: (_, __) {
+                                              print('Error loading user image: ${story.user.imageUrl}');
+                                            },
+                                            child: story.user.imageUrl.isEmpty
+                                                ? Icon(Icons.person, color: Colors.grey)
+                                                : null,
+                                          ),
+                                          SizedBox(width: 10),
+                                          Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                                story.user.name,
                                                 style: TextStyle(
-                                                  fontSize: 14,
-                                                  color: Colors.grey[600],
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
                                               ),
-                                          ],
-                                        ),
-                                        Spacer(),
-                                        if (story.isFeatured)
-                                          Chip(
-                                            label: Text('Featured'),
-                                            backgroundColor: Colors.amber[100],
-                                          ),
-                                      ],
-                                    ),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      story.title,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(height: 5),
-                                    Text(story.content),
-                                    if (story.cropType != null || story.yieldImprovement != null)
-                                      Padding(
-                                        padding: EdgeInsets.only(top: 10),
-                                        child: Row(
-                                          children: [
-                                            if (story.cropType != null)
-                                              Chip(
-                                                label: Text(story.cropType!),
-                                                backgroundColor: Colors.green[50],
-                                              ),
-                                            if (story.yieldImprovement != null) ...[
-                                              SizedBox(width: 8),
-                                              Chip(
-                                                label: Text('${story.yieldImprovement} ${story.yieldUnit ?? 'units'}'),
-                                                backgroundColor: Colors.blue[50],
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    if (story.images.isNotEmpty)
-                                      Padding(
-                                        padding: EdgeInsets.only(top: 10),
-                                        child: SizedBox(
-                                          height: 150,
-                                          child: ListView.builder(
-                                            scrollDirection: Axis.horizontal,
-                                            itemCount: story.images.length,
-                                            itemBuilder: (context, imgIndex) {
-                                              final image = story.images[imgIndex];
-                                              return Padding(
-                                                padding: EdgeInsets.only(right: 8.0),
-                                                child: Container(
-                                                  width: 150,
-                                                  decoration: BoxDecoration(
-                                                    borderRadius: BorderRadius.circular(8.0),
-                                                    image: DecorationImage(
-                                                      image: NetworkImage(image.imagePath),
-                                                      fit: BoxFit.cover,
-                                                      onError: (exception, stackTrace) {
-                                                        print('Error loading image: $exception');
-                                                      },
-                                                    ),
+                                              if (story.location != null)
+                            Text(
+                                                  story.location!,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.grey[600],
                                                   ),
                                                 ),
-                                              );
-                                            },
+                                            ],
                                           ),
+                                          Spacer(),
+                                          if (story.isFeatured)
+                                            Chip(
+                                              label: Text('Featured'),
+                                              backgroundColor: Colors.amber[100],
+                                            ),
+                                        ],
+                            ),
+                            SizedBox(height: 10),
+                                      Text(
+                                        story.title,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                    SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          icon: Icon(
-                                            (story.isLiked ?? false) ? Icons.thumb_up : Icons.thumb_up_outlined,
-                                            color: (story.isLiked ?? false) ? Colors.green : null,
+                                      SizedBox(height: 5),
+                                      Text(story.content),
+                                      if (story.cropType != null || story.yieldImprovement != null)
+                                        Padding(
+                                          padding: EdgeInsets.only(top: 10),
+                                          child: Row(
+                                            children: [
+                                              if (story.cropType != null)
+                                                Chip(
+                                                  label: Text(story.cropType!),
+                                                  backgroundColor: Colors.green[50],
+                                                ),
+                                              if (story.yieldImprovement != null) ...[
+                                                SizedBox(width: 8),
+                                                Chip(
+                                                  label: Text('${story.yieldImprovement} ${story.yieldUnit ?? 'units'}'),
+                                                  backgroundColor: Colors.blue[50],
+                                                ),
+                                              ],
+                                            ],
                                           ),
-                                          onPressed: () => _toggleStoryLike(story),
                                         ),
-                                        Text('${story.likesCount}'),
-                                        SizedBox(width: 16),
-                                        IconButton(
-                                          icon: Icon(Icons.comment_outlined),
-                                          onPressed: () => _addComment(story),
+                                      if (story.images.isNotEmpty)
+                                        Padding(
+                                          padding: EdgeInsets.only(top: 10),
+                                          child: SizedBox(
+                              height: 150,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                              itemCount: story.images.length,
+                                itemBuilder: (context, imgIndex) {
+                                                final image = story.images[imgIndex];
+                                  return Padding(
+                                    padding: EdgeInsets.only(right: 8.0),
+                                    child: Container(
+                                      width: 150,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8.0),
+                                                      color: Colors.grey[200],
+                                                    ),
+                                                    child: ClipRRect(
+                                                      borderRadius: BorderRadius.circular(8.0),
+                                                      child: image.imagePath.isNotEmpty
+                                                          ? Image.network(
+                                                              image.imagePath,
+                                          fit: BoxFit.cover,
+                                                              width: 150,
+                                                              height: 150,
+                                                              errorBuilder: (context, error, stackTrace) {
+                                                                print('Error loading story image: ${image.imagePath}');
+                                                                return Container(
+                                                                  width: 150,
+                                                                  height: 150,
+                                                                  color: Colors.grey[300],
+                                                                  child: Icon(
+                                                                    Icons.broken_image,
+                                                                    size: 50,
+                                                                    color: Colors.grey[600],
+                                                                  ),
+                                                                );
+                                                              },
+                                                              loadingBuilder: (context, child, loadingProgress) {
+                                                                if (loadingProgress == null) return child;
+                                                                return Container(
+                                                                  width: 150,
+                                                                  height: 150,
+                                                                  color: Colors.grey[200],
+                                                                  child: Center(
+                                                                    child: CircularProgressIndicator(
+                                                                      value: loadingProgress.expectedTotalBytes != null
+                                                                          ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                                                          : null,
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                              },
+                                                            )
+                                                          : Container(
+                                                              width: 150,
+                                                              height: 150,
+                                                              color: Colors.grey[300],
+                                                              child: Icon(
+                                                                Icons.image_not_supported,
+                                                                size: 50,
+                                                                color: Colors.grey[600],
+                                                              ),
                                         ),
-                                        Text('${story.commentsCount}'),
-                                        SizedBox(width: 16),
-                                        IconButton(
-                                          icon: Icon(Icons.visibility_outlined),
-                                          onPressed: null,
-                                        ),
-                                        Text('${story.viewsCount}'),
-                                        Spacer(),
-                                        Text(
-                                          '${story.createdAt.day}/${story.createdAt.month}/${story.createdAt.year}',
-                                          style: TextStyle(color: Colors.grey[600]),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ],
-                                ),
+                                  );
+                                },
                               ),
-                            );
-                          },
+                                          ),
+                                        ),
+                                      SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: Icon(
+                                              (story.isLiked ?? false) ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                              color: (story.isLiked ?? false) ? Colors.green : null,
+                                            ),
+                                            onPressed: () => _toggleStoryLike(story),
+                                          ),
+                                          Text('${story.likesCount}'),
+                                          SizedBox(width: 16),
+                                          IconButton(
+                                            icon: Icon(Icons.comment_outlined),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => SuccessStoryDetailScreen(story: story),
+                                                ),
+                                              ).then((_) {
+                                                setState(() {
+                                                  _loadSuccessStories();
+                                                });
+                                              });
+                                            },
+                                          ),
+                                          Text('${story.commentsCount}'),
+                                          SizedBox(width: 16),
+                                          IconButton(
+                                            icon: Icon(Icons.visibility_outlined),
+                                            onPressed: null,
+                                          ),
+                                          Text('${story.viewsCount}'),
+                                          Spacer(),
+                                          Text(
+                                            '${story.createdAt.day}/${story.createdAt.month}/${story.createdAt.year}',
+                                            style: TextStyle(color: Colors.grey[600]),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                         ),
-                      );
-                    }
-                    return SizedBox.shrink();
+                      ),
+                    );
                   },
+                        ),
+                );
+              }
+              return SizedBox.shrink();
+            },
                 ),
               ),
             ],
@@ -894,11 +796,11 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
               // Tips List
               Expanded(
                 child: FutureBuilder<Map<String, dynamic>>(
-                  future: tipsFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasError) {
+            future: tipsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
                       return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -912,7 +814,7 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                           ],
                         ),
                       );
-                    } else if (snapshot.hasData) {
+              } else if (snapshot.hasData) {
                       final tips = snapshot.data!['tips'] as List<Tip>;
                       if (tips.isEmpty) {
                         return Center(
@@ -945,23 +847,30 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                           return Future.value();
                         },
                         child: ListView.builder(
-                          padding: EdgeInsets.all(16.0),
-                          itemCount: tips.length,
-                          itemBuilder: (context, index) {
-                            final tip = tips[index];
-                            return Card(
-                              elevation: 2,
-                              margin: EdgeInsets.symmetric(vertical: 8.0),
-                              child: Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
+                  padding: EdgeInsets.all(16.0),
+                  itemCount: tips.length,
+                  itemBuilder: (context, index) {
+                    final tip = tips[index];
+                    return Card(
+                      elevation: 2,
+                      margin: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                                     Row(
                                       children: [
                                         CircleAvatar(
-                                          backgroundImage: NetworkImage(tip.user.imageUrl),
-                                          onBackgroundImageError: (_, __) {},
+                                          backgroundImage: tip.user.imageUrl.isNotEmpty
+                                              ? NetworkImage(tip.user.imageUrl)
+                                              : null,
+                                          onBackgroundImageError: (_, __) {
+                                            print('Error loading tip user image: ${tip.user.imageUrl}');
+                                          },
+                                          child: tip.user.imageUrl.isEmpty
+                                              ? Icon(Icons.person, color: Colors.grey)
+                                              : null,
                                         ),
                                         SizedBox(width: 10),
                                         Column(
@@ -992,14 +901,14 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                       ],
                                     ),
                                     SizedBox(height: 10),
-                                    Text(
+                            Text(
                                       tip.title,
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                       ),
-                                    ),
-                                    SizedBox(height: 5),
+                            ),
+                            SizedBox(height: 5),
                                     Text(tip.content),
                                     SizedBox(height: 10),
                                     Wrap(
@@ -1123,35 +1032,52 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                           },
                                         ),
                                         Spacer(),
-                                        Text(
+                            Text(
                                           '${tip.createdAt.day}/${tip.createdAt.month}/${tip.createdAt.year}',
                                           style: TextStyle(color: Colors.grey[600]),
                                         ),
                                       ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
+                            ),
+                          ],
                         ),
-                      );
-                    }
-                    return SizedBox.shrink();
+                      ),
+                    );
                   },
+                        ),
+                );
+              }
+              return SizedBox.shrink();
+            },
                 ),
               ),
             ],
           ),
         ],
       ),
-      floatingActionButton: _tabController.index == 0
-          ? FloatingActionButton(
-              onPressed: _createSuccessStory,
-              child: Icon(Icons.add),
-              backgroundColor: Colors.green,
-            )
-          : null,
+      floatingActionButton: AnimatedSwitcher(
+        duration: Duration(milliseconds: 200),
+        child: _tabController.index == 0
+            ? FloatingActionButton(
+                key: ValueKey('success_stories_fab'),
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CreateSuccessStoryScreen(),
+                    ),
+                  );
+                  if (result == true) {
+                    // Refresh the success stories list
+                    setState(() {
+                      _loadSuccessStories();
+                    });
+                  }
+                },
+                child: Icon(Icons.add),
+                backgroundColor: Colors.green,
+              )
+            : SizedBox.shrink(),
+      ),
       bottomNavigationBar: BottomNavBar(
         currentIndex: 3, // Community tab
         onTap: _onNavTap,

@@ -49,12 +49,12 @@ class SuccessStory {
       content: json['content'],
       location: json['location'],
       cropType: json['crop_type'],
-      yieldImprovement: json['yield_improvement']?.toDouble(),
+      yieldImprovement: _parseYieldImprovement(json['yield_improvement']),
       yieldUnit: json['yield_unit'],
       isFeatured: json['is_featured'] ?? false,
       viewsCount: json['views_count'] ?? 0,
       likesCount: json['likes_count'] ?? 0,
-      commentsCount: json['comments_count'] ?? 0,
+      commentsCount: json['all_comments_count'] ?? json['comments_count'] ?? 0,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
       user: User.fromJson(json['user']),
@@ -66,6 +66,21 @@ class SuccessStory {
           .toList() ?? [],
       isLiked: json['is_liked'],
     );
+  }
+
+  static double? _parseYieldImprovement(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        print('Error parsing yield_improvement string: $value');
+        return null;
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> toJson() {
