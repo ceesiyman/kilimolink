@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../model/product_model.dart';
 import '../service/api_service.dart';
+import '../service/auth_storage_service.dart';
 import '../widgets/bottom_nav_bar.dart';
-import 'cart_screen.dart';
 import 'home_screen.dart';
 import 'expert_screen.dart';
 import 'community_screen.dart';
 import 'profile_screen.dart';
 import 'crop_detail_screen.dart';
+import 'create_product_screen.dart';
+import 'login_screen.dart';
 
 class MarketScreen extends StatefulWidget {
   @override
@@ -16,21 +18,19 @@ class MarketScreen extends StatefulWidget {
 
 class _MarketScreenState extends State<MarketScreen> {
   final ApiService apiService = ApiService();
+  final AuthStorageService authStorage = AuthStorageService();
   late Future<List<Category>> categoriesFuture;
   late Future<List<Product>> productsFuture;
-  List<Map<String, dynamic>> cartItems = [];
   String searchQuery = '';
   Category? selectedCategory;
   final TextEditingController minPriceController = TextEditingController();
   final TextEditingController maxPriceController = TextEditingController();
-  Map<int, int> productQuantities = {};
 
   @override
   void initState() {
     super.initState();
     categoriesFuture = apiService.fetchCategoriesFromApi();
     productsFuture = apiService.fetchProductsFromApi();
-    cartItems = [];
   }
 
   @override
@@ -87,62 +87,39 @@ class _MarketScreenState extends State<MarketScreen> {
     }
   }
 
-  void _navigateToCart() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CartScreen(cartItems: cartItems),
-      ),
-    );
-  }
-
-  void _addToCart(Product product) {
-    setState(() {
-      int existingIndex = cartItems.indexWhere((item) => (item['product'] as Product).id == product.id);
-      
-      if (existingIndex != -1) {
-        cartItems[existingIndex]['quantity'] = (cartItems[existingIndex]['quantity'] as int) + 1;
-      } else {
-        cartItems.add({
-          'product': product,
-          'quantity': 1,
-        });
-      }
-      
-      productQuantities[product.id] = (productQuantities[product.id] ?? 0) + 1;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${product.name} added to cart')),
-    );
-  }
-
-  void _updateQuantity(Product product, int newQuantity) {
-    if (newQuantity < 0) return;
-    
-    setState(() {
-      productQuantities[product.id] = newQuantity;
-      
-      int existingIndex = cartItems.indexWhere((item) => (item['product'] as Product).id == product.id);
-      if (existingIndex != -1) {
-        if (newQuantity == 0) {
-          cartItems.removeAt(existingIndex);
-        } else {
-          cartItems[existingIndex]['quantity'] = newQuantity;
-        }
-      } else if (newQuantity > 0) {
-        cartItems.add({
-          'product': product,
-          'quantity': newQuantity,
-        });
-      }
-    });
-  }
-
   void _updateSearchQuery(String query) {
     setState(() {
       searchQuery = query;
     });
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    final isLoggedIn = await authStorage.isLoggedIn();
+    
+    if (isLoggedIn) {
+      // User is logged in, navigate to create product screen
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CreateProductScreen(),
+        ),
+      );
+      
+      // If product was created successfully, refresh the products list
+      if (result == true) {
+        setState(() {
+          productsFuture = apiService.fetchProductsFromApi();
+        });
+      }
+    } else {
+      // User is not logged in, navigate to login screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LoginScreen(),
+        ),
+      );
+    }
   }
 
   @override
@@ -151,12 +128,6 @@ class _MarketScreenState extends State<MarketScreen> {
       appBar: AppBar(
         title: Text('Agri Market'),
         backgroundColor: Colors.green,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.shopping_cart),
-            onPressed: _navigateToCart,
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -289,6 +260,12 @@ class _MarketScreenState extends State<MarketScreen> {
         currentIndex: 1,
         onTap: _onNavTap,
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _checkAuthAndNavigate,
+        backgroundColor: Colors.green,
+        child: Icon(Icons.add, color: Colors.white),
+        tooltip: 'Add Product',
+      ),
     );
   }
 
@@ -320,8 +297,6 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   Widget _buildProductCard(Product product) {
-    int quantity = productQuantities[product.id] ?? 0;
-    
     return Card(
       elevation: 2,
       child: Column(
@@ -341,40 +316,56 @@ class _MarketScreenState extends State<MarketScreen> {
             ),
           ),
           Padding(
-            padding: EdgeInsets.all(8.0),
+            padding: EdgeInsets.all(12.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   product.name,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                SizedBox(height: 5),
+                SizedBox(height: 8),
                 Text(
                   '${product.price.toStringAsFixed(2)} Tsh',
-                  style: TextStyle(fontSize: 14, color: Colors.green),
+                  style: TextStyle(
+                    fontSize: 16, 
+                    color: Colors.green, 
+                    fontWeight: FontWeight.bold
+                  ),
                 ),
-                SizedBox(height: 5),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.remove_circle_outline, color: Colors.green),
-                      onPressed: quantity > 0 
-                          ? () => _updateQuantity(product, quantity - 1)
-                          : null,
-                    ),
-                    Text(
-                      quantity.toString(),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.location_on, 
+                        size: 14, 
+                        color: Colors.green[700]
                       ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.add_circle_outline, color: Colors.green),
-                      onPressed: () => _updateQuantity(product, quantity + 1),
-                    ),
-                  ],
+                      SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          product.location ?? 'Location not available',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
