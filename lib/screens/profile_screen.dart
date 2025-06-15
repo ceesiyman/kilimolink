@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../service/api_service.dart';
+import '../service/auth_storage_service.dart';
 import '../model/user_model.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'home_screen.dart';
@@ -22,13 +23,67 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ApiService apiService = ApiService();
+  final AuthStorageService _authStorage = AuthStorageService();
   late Future<User> userFuture;
   final bool useRealApi = true;
 
   @override
   void initState() {
     super.initState();
-    userFuture = useRealApi ? apiService.fetchUserFromApi() : apiService.fetchUser();
+    _checkAuthAndLoadUser();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh user data when dependencies change (e.g., returning from other screens)
+    _refreshUserData();
+  }
+
+  Future<void> _checkAuthAndLoadUser() async {
+    final isLoggedIn = await _authStorage.isLoggedIn();
+    if (!isLoggedIn) {
+      // Redirect to login screen if not authenticated
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => LoginScreen()),
+          (route) => false,
+        );
+      });
+      return;
+    }
+    
+    // Load user data if authenticated
+    setState(() {
+      userFuture = useRealApi ? apiService.fetchUserFromApi() : apiService.fetchUser();
+    });
+  }
+
+  Future<void> _handleAuthError() async {
+    // Clear auth data and redirect to login
+    await _authStorage.clearAuthData();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => LoginScreen()),
+      (route) => false,
+    );
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Please log in to access your profile'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+
+  Future<void> _refreshUserData() async {
+    final isLoggedIn = await _authStorage.isLoggedIn();
+    if (isLoggedIn && mounted) {
+      setState(() {
+        userFuture = useRealApi ? apiService.fetchUserFromApi() : apiService.fetchUser();
+      });
+    }
   }
 
   void _onNavTap(int index) {
@@ -62,16 +117,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _logout() async {
-    final success = useRealApi ? await apiService.logoutFromApi() : await apiService.logout();
-    if (success) {
+    try {
+      final success = useRealApi ? await apiService.logoutFromApi() : await apiService.logout();
+      if (success) {
+        // Clear any local data and navigate to login screen
+        await _authStorage.clearAuthData();
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => LoginScreen()),
+          (route) => false,
+        );
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully logged out'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to logout'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Even if logout fails, clear local auth data
+      await _authStorage.clearAuthData();
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => LoginScreen()),
         (route) => false,
       );
-    } else {
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to logout')),
+        SnackBar(
+          content: Text('Error during logout: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -99,7 +184,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            // Check if error is authentication related
+            final error = snapshot.error.toString().toLowerCase();
+            if (error.contains('401') || 
+                error.contains('unauthorized') || 
+                error.contains('not authenticated') ||
+                error.contains('token') ||
+                error.contains('authentication')) {
+              // Handle authentication error
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _handleAuthError();
+              });
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'Authentication Required',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Redirecting to login...',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error, size: 64, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text(
+                    'Error Loading Profile',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${snapshot.error}',
+                    style: TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        userFuture = useRealApi ? apiService.fetchUserFromApi() : apiService.fetchUser();
+                      });
+                    },
+                    child: Text('Retry'),
+                  ),
+                ],
+              ),
+            );
           } else if (snapshot.hasData) {
             final user = snapshot.data!;
             return Padding(
@@ -203,7 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => SavedTipsScreen(savedTips: user.savedTips),
+                          builder: (context) => SavedTipsScreen(),
                         ),
                       );
                     },
