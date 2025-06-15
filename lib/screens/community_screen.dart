@@ -11,6 +11,8 @@ import 'market_screen.dart';
 import 'expert_screen.dart';
 import 'community_screen.dart';
 import 'profile_screen.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class CommunityScreen extends StatefulWidget {
   @override
@@ -21,24 +23,30 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
   final ApiService apiService = ApiService();
   final AuthStorageService authStorage = AuthStorageService();
   late TabController _tabController;
-  late Future<List<SuccessStory>> successStoriesFuture;
+  late Future<Map<String, dynamic>> successStoriesFuture;
   late Future<List<DiscussionMessage>> discussionMessagesFuture;
   late Future<Map<String, dynamic>> categoriesFuture;
   late Future<Map<String, dynamic>> tipsFuture;
-  final bool useRealApi = false;
+  final bool useRealApi = true;
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _storySearchController = TextEditingController();
   List<DiscussionMessage> _discussionMessages = [];
   TipCategory? selectedCategory;
   String? searchQuery;
+  String? storySearchQuery;
   String sortBy = 'latest';
+  String storySortBy = 'latest';
   bool showFeatured = false;
+  bool showFeaturedStories = false;
+  String? selectedCropType;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    successStoriesFuture = apiService.fetchSuccessStoriesFromApi();
+    _loadSuccessStories();
     discussionMessagesFuture = apiService.fetchDiscussionMessagesFromApi();
     categoriesFuture = apiService.fetchTipCategoriesFromApi();
     tipsFuture = apiService.fetchTipsFromApi(
@@ -54,11 +62,23 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
     });
   }
 
+  void _loadSuccessStories() {
+    setState(() {
+      successStoriesFuture = apiService.fetchSuccessStoriesFromApi(
+        search: storySearchQuery,
+        cropType: selectedCropType,
+        featured: showFeaturedStories ? true : null,
+        sort: storySortBy,
+      );
+    });
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
     _messageController.dispose();
     _searchController.dispose();
+    _storySearchController.dispose();
     super.dispose();
   }
 
@@ -90,7 +110,6 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
         MaterialPageRoute(builder: (context) => ProfileScreen()),
       );
     }
-    // Add navigation for Profile tab as needed
   }
 
   void _sendMessage() async {
@@ -142,6 +161,208 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
     });
   }
 
+  Future<void> _createSuccessStory() async {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    final locationController = TextEditingController();
+    final cropTypeController = TextEditingController();
+    final yieldController = TextEditingController();
+    final yieldUnitController = TextEditingController();
+    List<Map<String, dynamic>> selectedImages = [];
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Create Success Story'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(
+                  labelText: 'Title *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: contentController,
+                decoration: InputDecoration(
+                  labelText: 'Content *',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: locationController,
+                decoration: InputDecoration(
+                  labelText: 'Location',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: cropTypeController,
+                decoration: InputDecoration(
+                  labelText: 'Crop Type',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: yieldController,
+                      decoration: InputDecoration(
+                        labelText: 'Yield Improvement',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: yieldUnitController,
+                      decoration: InputDecoration(
+                        labelText: 'Unit (kg, tons, etc.)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
+                  if (image != null) {
+                    final file = File(image.path);
+                    final bytes = await file.readAsBytes();
+                    selectedImages.add({
+                      'file': bytes,
+                      'filename': image.name,
+                      'caption': '',
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Image added')),
+                    );
+                  }
+                },
+                icon: Icon(Icons.add_photo_alternate),
+                label: Text('Add Images'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (titleController.text.isEmpty || contentController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Title and content are required')),
+                );
+                return;
+              }
+
+              try {
+                await apiService.createSuccessStoryFromApi(
+                  title: titleController.text,
+                  content: contentController.text,
+                  location: locationController.text.isEmpty ? null : locationController.text,
+                  cropType: cropTypeController.text.isEmpty ? null : cropTypeController.text,
+                  yieldImprovement: yieldController.text.isEmpty ? null : double.tryParse(yieldController.text),
+                  yieldUnit: yieldUnitController.text.isEmpty ? null : yieldUnitController.text,
+                  images: selectedImages.isEmpty ? null : selectedImages,
+                );
+
+                Navigator.pop(context);
+                _loadSuccessStories();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Success story created successfully')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error creating story: $e')),
+                );
+              }
+            },
+            child: Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleStoryLike(SuccessStory story) async {
+    try {
+      final response = await apiService.toggleSuccessStoryLikeFromApi(story.id);
+      _loadSuccessStories();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(response['message'])),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error toggling like: $e')),
+      );
+    }
+  }
+
+  Future<void> _addComment(SuccessStory story) async {
+    final commentController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Comment'),
+        content: TextField(
+          controller: commentController,
+          decoration: InputDecoration(
+            labelText: 'Comment',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (commentController.text.isEmpty) return;
+
+              try {
+                await apiService.addSuccessStoryCommentFromApi(
+                  storyId: story.id,
+                  comment: commentController.text,
+                );
+
+                Navigator.pop(context);
+                _loadSuccessStories();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Comment added successfully')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error adding comment: $e')),
+                );
+              }
+            },
+            child: Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -164,72 +385,296 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
         controller: _tabController,
         children: [
           // Success Stories Tab
-          FutureBuilder<List<SuccessStory>>(
-            future: successStoriesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              } else if (snapshot.hasData) {
-                final stories = snapshot.data!;
-                return ListView.builder(
-                  padding: EdgeInsets.all(16.0),
-                  itemCount: stories.length,
-                  itemBuilder: (context, index) {
-                    final story = stories[index];
-                    return Card(
-                      elevation: 2,
-                      margin: EdgeInsets.symmetric(vertical: 8.0),
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
+          Column(
+            children: [
+              // Search and Filter Bar
+              Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _storySearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search success stories...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            _storySearchController.clear();
+                            storySearchQuery = null;
+                            _loadSuccessStories();
+                          },
+                        ),
+                      ),
+                      onSubmitted: (value) {
+                        storySearchQuery = value.isEmpty ? null : value;
+                        _loadSuccessStories();
+                      },
+                    ),
+                    SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          FilterChip(
+                            label: Text('Featured'),
+                            selected: showFeaturedStories,
+                            onSelected: (value) {
+                              setState(() {
+                                showFeaturedStories = value;
+                                _loadSuccessStories();
+                              });
+                            },
+                          ),
+                          SizedBox(width: 8),
+                          FilterChip(
+                            label: Text('Latest'),
+                            selected: storySortBy == 'latest',
+                            onSelected: (value) {
+                              if (value) {
+                                setState(() {
+                                  storySortBy = 'latest';
+                                  _loadSuccessStories();
+                                });
+                              }
+                            },
+                          ),
+                          SizedBox(width: 8),
+                          FilterChip(
+                            label: Text('Popular'),
+                            selected: storySortBy == 'popular',
+                            onSelected: (value) {
+                              if (value) {
+                                setState(() {
+                                  storySortBy = 'popular';
+                                  _loadSuccessStories();
+                                });
+                              }
+                            },
+                          ),
+                          SizedBox(width: 8),
+                          FilterChip(
+                            label: Text('Most Viewed'),
+                            selected: storySortBy == 'views',
+                            onSelected: (value) {
+                              if (value) {
+                                setState(() {
+                                  storySortBy = 'views';
+                                  _loadSuccessStories();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Success Stories List
+              Expanded(
+                child: FutureBuilder<Map<String, dynamic>>(
+                  future: successStoriesFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    } else if (snapshot.hasError) {
+                      return Center(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              '"${story.content}"',
-                              style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              story.userName,
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 10),
-                            SizedBox(
-                              height: 150,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: story.imageUrls.length,
-                                itemBuilder: (context, imgIndex) {
-                                  return Padding(
-                                    padding: EdgeInsets.only(right: 8.0),
-                                    child: Container(
-                                      width: 150,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8.0),
-                                        image: DecorationImage(
-                                          image: NetworkImage(story.imageUrls[imgIndex]),
-                                          fit: BoxFit.cover,
-                                          onError: (exception, stackTrace) {
-                                            print('Error loading image: $exception');
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                            Text('Error loading success stories: ${snapshot.error}'),
+                            SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _loadSuccessStories,
+                              child: Text('Retry'),
                             ),
                           ],
                         ),
-                      ),
-                    );
+                      );
+                    } else if (snapshot.hasData) {
+                      final stories = snapshot.data!['stories'] as List<SuccessStory>;
+                      if (stories.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('No success stories found'),
+                              if (storySearchQuery != null || showFeaturedStories || selectedCropType != null)
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      storySearchQuery = null;
+                                      showFeaturedStories = false;
+                                      selectedCropType = null;
+                                      _storySearchController.clear();
+                                      _loadSuccessStories();
+                                    });
+                                  },
+                                  child: Text('Clear filters'),
+                                ),
+                            ],
+                          ),
+                        );
+                      }
+                      return RefreshIndicator(
+                        onRefresh: () {
+                          _loadSuccessStories();
+                          return Future.value();
+                        },
+                        child: ListView.builder(
+                          padding: EdgeInsets.all(16.0),
+                          itemCount: stories.length,
+                          itemBuilder: (context, index) {
+                            final story = stories[index];
+                            return Card(
+                              elevation: 2,
+                              margin: EdgeInsets.symmetric(vertical: 8.0),
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          backgroundImage: NetworkImage(story.user.imageUrl),
+                                          onBackgroundImageError: (_, __) {},
+                                        ),
+                                        SizedBox(width: 10),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              story.user.name,
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (story.location != null)
+                                              Text(
+                                                story.location!,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        Spacer(),
+                                        if (story.isFeatured)
+                                          Chip(
+                                            label: Text('Featured'),
+                                            backgroundColor: Colors.amber[100],
+                                          ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      story.title,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+                                    Text(story.content),
+                                    if (story.cropType != null || story.yieldImprovement != null)
+                                      Padding(
+                                        padding: EdgeInsets.only(top: 10),
+                                        child: Row(
+                                          children: [
+                                            if (story.cropType != null)
+                                              Chip(
+                                                label: Text(story.cropType!),
+                                                backgroundColor: Colors.green[50],
+                                              ),
+                                            if (story.yieldImprovement != null) ...[
+                                              SizedBox(width: 8),
+                                              Chip(
+                                                label: Text('${story.yieldImprovement} ${story.yieldUnit ?? 'units'}'),
+                                                backgroundColor: Colors.blue[50],
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    if (story.images.isNotEmpty)
+                                      Padding(
+                                        padding: EdgeInsets.only(top: 10),
+                                        child: SizedBox(
+                                          height: 150,
+                                          child: ListView.builder(
+                                            scrollDirection: Axis.horizontal,
+                                            itemCount: story.images.length,
+                                            itemBuilder: (context, imgIndex) {
+                                              final image = story.images[imgIndex];
+                                              return Padding(
+                                                padding: EdgeInsets.only(right: 8.0),
+                                                child: Container(
+                                                  width: 150,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(8.0),
+                                                    image: DecorationImage(
+                                                      image: NetworkImage(image.imagePath),
+                                                      fit: BoxFit.cover,
+                                                      onError: (exception, stackTrace) {
+                                                        print('Error loading image: $exception');
+                                                      },
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(
+                                            (story.isLiked ?? false) ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                            color: (story.isLiked ?? false) ? Colors.green : null,
+                                          ),
+                                          onPressed: () => _toggleStoryLike(story),
+                                        ),
+                                        Text('${story.likesCount}'),
+                                        SizedBox(width: 16),
+                                        IconButton(
+                                          icon: Icon(Icons.comment_outlined),
+                                          onPressed: () => _addComment(story),
+                                        ),
+                                        Text('${story.commentsCount}'),
+                                        SizedBox(width: 16),
+                                        IconButton(
+                                          icon: Icon(Icons.visibility_outlined),
+                                          onPressed: null,
+                                        ),
+                                        Text('${story.viewsCount}'),
+                                        Spacer(),
+                                        Text(
+                                          '${story.createdAt.day}/${story.createdAt.month}/${story.createdAt.year}',
+                                          style: TextStyle(color: Colors.grey[600]),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }
+                    return SizedBox.shrink();
                   },
-                );
-              }
-              return SizedBox.shrink();
-            },
+                ),
+              ),
+            ],
           ),
 
           // Discussion Tab
@@ -700,6 +1145,13 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
           ),
         ],
       ),
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton(
+              onPressed: _createSuccessStory,
+              child: Icon(Icons.add),
+              backgroundColor: Colors.green,
+            )
+          : null,
       bottomNavigationBar: BottomNavBar(
         currentIndex: 3, // Community tab
         onTap: _onNavTap,

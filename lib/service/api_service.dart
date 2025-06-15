@@ -198,31 +198,6 @@ class ApiService {
         .toList();
   }
 
- 
-
-  Future<List<SuccessStory>> fetchSuccessStories() async {
-    await Future.delayed(Duration(seconds: 1));
-    return [
-      SuccessStory(
-        userName: 'Joel',
-        content: 'After experimenting with organic fertilizers, my yields have tripled',
-        imageUrls: [
-          'https://media.istockphoto.com/id/684977254/photo/farmer-hand-giving-plant-organic-humus-fertilizer-to-plant.jpg?s=612x612&w=0&k=20&c=SjD1diUDXEBmXRF1My6lDdwV9BGpPTD1yWUCwz8235U=',
-          'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcQPmqcMjTQDeNX-8lGQlWTbFJpDYg0g5U3tRA&s',
-          'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcS7qKsEk_L1hwa6GjXVjrZiwMSzdA4_orqd4A&s',
-        ],
-      ),
-      SuccessStory(
-        userName: 'Amina',
-        content: 'Switching to drip irrigation saved me 30% on water usage',
-        imageUrls: [
-          'https://encrypted-tbn0.gstatic.com/images?q=tbngi9GcSJzQEudhZw0uw-SwsXaTpVme8D1nubRBbi7g&s',
-          'https://qph.cf2.quoracdn.net/main-qimg-f69435572d9f81f037473a860e4e5a2d-lq',
-        ],
-      ),
-    ];
-  }
-
   Future<List<DiscussionMessage>> fetchDiscussionMessages() async {
     await Future.delayed(Duration(seconds: 1));
     return [
@@ -731,19 +706,7 @@ class ApiService {
     return true;
   }
 
-  Future<List<SuccessStory>> fetchSuccessStoriesFromApi() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/community/success-stories'));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => SuccessStory.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load success stories: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error fetching success stories: $e');
-    }
-  }
+ 
 
   Future<List<DiscussionMessage>> fetchDiscussionMessagesFromApi() async {
     try {
@@ -1497,6 +1460,435 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Error creating tip: $e');
+    }
+  }
+
+  // ==================== SUCCESS STORIES API METHODS ====================
+
+  /// Fetch success stories with filters
+  Future<Map<String, dynamic>> fetchSuccessStoriesFromApi({
+    String? search,
+    String? cropType,
+    bool? featured,
+    String? sort,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (search != null) queryParams['search'] = search;
+      if (cropType != null) queryParams['crop_type'] = cropType;
+      if (featured != null) queryParams['featured'] = featured.toString();
+      if (sort != null) queryParams['sort'] = sort;
+
+      final uri = Uri.parse('$baseUrl/success-stories').replace(queryParameters: queryParams);
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> storiesJson = data['stories']['data'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        final stories = storiesJson.map((json) {
+          // Prepend base URL to image paths
+          if (json['images'] != null) {
+            for (var image in json['images']) {
+              if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
+                image['image_path'] = imageBaseUrl + image['image_path'];
+              }
+            }
+          }
+          return SuccessStory.fromJson(json);
+        }).toList();
+
+        return {
+          'stories': stories,
+          'pagination': data['stories'],
+        };
+      } else {
+        throw Exception('Failed to load success stories: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching success stories: $e');
+    }
+  }
+
+  /// Fetch a specific success story
+  Future<SuccessStory> fetchSuccessStoryFromApi(int id) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/success-stories/$id'));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final storyJson = data['story'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        // Prepend base URL to image paths
+        if (storyJson['images'] != null) {
+          for (var image in storyJson['images']) {
+            if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
+              image['image_path'] = imageBaseUrl + image['image_path'];
+            }
+          }
+        }
+        
+        return SuccessStory.fromJson(storyJson);
+      } else if (response.statusCode == 404) {
+        throw Exception('Success story not found');
+      } else {
+        throw Exception('Failed to load success story: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching success story: $e');
+    }
+  }
+
+  /// Create a new success story
+  Future<SuccessStory> createSuccessStoryFromApi({
+    required String title,
+    required String content,
+    String? location,
+    String? cropType,
+    double? yieldImprovement,
+    String? yieldUnit,
+    List<Map<String, dynamic>>? images,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      
+      // Remove Content-Type for multipart request
+      headers.remove('Content-Type');
+      
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/success-stories'),
+      );
+      
+      // Add headers
+      request.headers.addAll(headers);
+      
+      // Add text fields
+      request.fields['title'] = title;
+      request.fields['content'] = content;
+      if (location != null) request.fields['location'] = location;
+      if (cropType != null) request.fields['crop_type'] = cropType;
+      if (yieldImprovement != null) request.fields['yield_improvement'] = yieldImprovement.toString();
+      if (yieldUnit != null) request.fields['yield_unit'] = yieldUnit;
+      
+      // Add images
+      if (images != null) {
+        for (int i = 0; i < images.length; i++) {
+          final imageData = images[i];
+          if (imageData['file'] != null) {
+            request.files.add(await http.MultipartFile.fromBytes(
+              'images[]',
+              imageData['file'],
+              filename: imageData['filename'] ?? 'image_$i.jpg',
+            ));
+          }
+          if (imageData['caption'] != null) {
+            request.fields['captions[]'] = imageData['caption'];
+          }
+        }
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final storyJson = data['story'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        // Prepend base URL to image paths
+        if (storyJson['images'] != null) {
+          for (var image in storyJson['images']) {
+            if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
+              image['image_path'] = imageBaseUrl + image['image_path'];
+            }
+          }
+        }
+        
+        return SuccessStory.fromJson(storyJson);
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to create success story: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error creating success story: $e');
+    }
+  }
+
+  /// Update a success story
+  Future<SuccessStory> updateSuccessStoryFromApi({
+    required int id,
+    String? title,
+    String? content,
+    String? location,
+    String? cropType,
+    double? yieldImprovement,
+    String? yieldUnit,
+    List<Map<String, dynamic>>? images,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      
+      // Remove Content-Type for multipart request
+      headers.remove('Content-Type');
+      
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/success-stories/$id'),
+      );
+      
+      // Add headers
+      request.headers.addAll(headers);
+      
+      // Add _method field for PUT request
+      request.fields['_method'] = 'PUT';
+      
+      // Add text fields
+      if (title != null) request.fields['title'] = title;
+      if (content != null) request.fields['content'] = content;
+      if (location != null) request.fields['location'] = location;
+      if (cropType != null) request.fields['crop_type'] = cropType;
+      if (yieldImprovement != null) request.fields['yield_improvement'] = yieldImprovement.toString();
+      if (yieldUnit != null) request.fields['yield_unit'] = yieldUnit;
+      
+      // Add images
+      if (images != null) {
+        for (int i = 0; i < images.length; i++) {
+          final imageData = images[i];
+          if (imageData['file'] != null) {
+            request.files.add(await http.MultipartFile.fromBytes(
+              'images[]',
+              imageData['file'],
+              filename: imageData['filename'] ?? 'image_$i.jpg',
+            ));
+          }
+          if (imageData['caption'] != null) {
+            request.fields['captions[]'] = imageData['caption'];
+          }
+        }
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final storyJson = data['story'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        // Prepend base URL to image paths
+        if (storyJson['images'] != null) {
+          for (var image in storyJson['images']) {
+            if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
+              image['image_path'] = imageBaseUrl + image['image_path'];
+            }
+          }
+        }
+        
+        return SuccessStory.fromJson(storyJson);
+      } else if (response.statusCode == 403) {
+        throw Exception('Unauthorized to update this success story');
+      } else if (response.statusCode == 404) {
+        throw Exception('Success story not found');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to update success story: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error updating success story: $e');
+    }
+  }
+
+  /// Delete a success story
+  Future<bool> deleteSuccessStoryFromApi(int id) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/success-stories/$id'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else if (response.statusCode == 403) {
+        throw Exception('Unauthorized to delete this success story');
+      } else if (response.statusCode == 404) {
+        throw Exception('Success story not found');
+      } else {
+        throw Exception('Failed to delete success story: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error deleting success story: $e');
+    }
+  }
+
+  /// Get user's success stories
+  Future<Map<String, dynamic>> fetchMySuccessStoriesFromApi() async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/success-stories/my-stories'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> storiesJson = data['stories']['data'];
+        final imageBaseUrl = dotenv.env['IMAGE_BASE_URL'] ?? '';
+        
+        final stories = storiesJson.map((json) {
+          // Prepend base URL to image paths
+          if (json['images'] != null) {
+            for (var image in json['images']) {
+              if (image['image_path'] != null && image['image_path'].toString().isNotEmpty) {
+                image['image_path'] = imageBaseUrl + image['image_path'];
+              }
+            }
+          }
+          return SuccessStory.fromJson(json);
+        }).toList();
+
+        return {
+          'stories': stories,
+          'pagination': data['stories'],
+        };
+      } else {
+        throw Exception('Failed to load my success stories: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching my success stories: $e');
+    }
+  }
+
+  /// Like or unlike a success story
+  Future<Map<String, dynamic>> toggleSuccessStoryLikeFromApi(int id) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/success-stories/$id/like'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'message': data['message'],
+          'likesCount': data['likes_count'],
+        };
+      } else if (response.statusCode == 404) {
+        throw Exception('Success story not found');
+      } else {
+        throw Exception('Failed to toggle like: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error toggling like: $e');
+    }
+  }
+
+  /// Get comments for a success story
+  Future<Map<String, dynamic>> fetchSuccessStoryCommentsFromApi(int id) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/success-stories/$id/comments'));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> commentsJson = data['comments']['data'];
+        
+        final comments = commentsJson.map((json) {
+          return StoryComment.fromJson(json);
+        }).toList();
+
+        return {
+          'comments': comments,
+          'pagination': data['comments'],
+        };
+      } else if (response.statusCode == 404) {
+        throw Exception('Success story not found');
+      } else {
+        throw Exception('Failed to load comments: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching comments: $e');
+    }
+  }
+
+  /// Add a comment to a success story
+  Future<StoryComment> addSuccessStoryCommentFromApi({
+    required int storyId,
+    required String comment,
+    int? parentId,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/success-stories/$storyId/comments'),
+        headers: headers,
+        body: jsonEncode({
+          'comment': comment,
+          if (parentId != null) 'parent_id': parentId,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return StoryComment.fromJson(data['comment']);
+      } else if (response.statusCode == 404) {
+        throw Exception('Success story not found');
+      } else if (response.statusCode == 422) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['errors']?.values?.first?.first ?? 'Validation failed');
+      } else {
+        throw Exception('Failed to add comment: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error adding comment: $e');
+    }
+  }
+
+  /// Test image upload for success stories
+  Future<Map<String, dynamic>> testSuccessStoryImageUploadFromApi(List<Map<String, dynamic>> images) async {
+    try {
+      final headers = await _getAuthHeaders();
+      
+      // Remove Content-Type for multipart request
+      headers.remove('Content-Type');
+      
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/success-stories/test-upload'),
+      );
+      
+      // Add headers
+      request.headers.addAll(headers);
+      
+      // Add images
+      for (int i = 0; i < images.length; i++) {
+        final imageData = images[i];
+        if (imageData['file'] != null) {
+          request.files.add(await http.MultipartFile.fromBytes(
+            'images[]',
+            imageData['file'],
+            filename: imageData['filename'] ?? 'image_$i.jpg',
+          ));
+        }
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to test upload: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error testing upload: $e');
     }
   }
 }
