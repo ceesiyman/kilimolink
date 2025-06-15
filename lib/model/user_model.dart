@@ -7,6 +7,7 @@ class User {
   final String location;
   final List<String> savedTips; // List of saved tips
   final String role;
+  final String? phoneNumber;
 
   User({
     required this.name,
@@ -17,19 +18,36 @@ class User {
     required this.location,
     required this.savedTips,
     required this.role,
+    this.phoneNumber,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
-    return User(
-      name: json['name'] ?? '',
-      username: json['username'] ?? '',
-      email: json['email'] ?? '',
-      imageUrl: json['imageUrl'] ?? '',
-      favorites: (json['favorites'] as List?)?.map((e) => e?.toString() ?? '').toList() ?? [],
-      location: json['location'] ?? '',
-      savedTips: (json['savedTips'] ?? json['saved_tips'] as List?)?.map((e) => e?.toString() ?? '').toList() ?? [],
-      role: json['role'] ?? '',
-    );
+    try {
+      print('Parsing user JSON: $json');
+      return User(
+        name: json['name']?.toString() ?? '',
+        username: json['username']?.toString() ?? '',
+        email: json['email']?.toString() ?? '',
+        imageUrl: json['imageUrl']?.toString() ?? json['image_url']?.toString() ?? '',
+        favorites: _parseListField(json['favorites']),
+        location: json['location']?.toString() ?? '',
+        savedTips: _parseListField(json['savedTips'] ?? json['saved_tips']),
+        role: json['role']?.toString() ?? '',
+        phoneNumber: json['phoneNumber']?.toString() ?? json['phone_number']?.toString(),
+      );
+    } catch (e) {
+      print('Error parsing user JSON: $e');
+      print('User JSON data: $json');
+      rethrow;
+    }
+  }
+
+  static List<String> _parseListField(dynamic field) {
+    if (field == null) return [];
+    if (field is List) {
+      return field.map((e) => e?.toString() ?? '').toList();
+    }
+    return [];
   }
 
   Map<String, dynamic> toJson() {
@@ -42,6 +60,7 @@ class User {
       'location': location,
       'savedTips': savedTips,
       'role': role,
+      'phoneNumber': phoneNumber,
     };
   }
 }
