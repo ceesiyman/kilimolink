@@ -313,31 +313,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 20),
-                  _buildProfileOption(
-                    icon: Icons.favorite_border,
-                    label: 'My Favourites',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => MyFavoritesScreen(favorites: user.favorites),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildProfileOption(
-                    icon: Icons.location_on,
-                    label: 'Location',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => LocationScreen(location: user.location),
-                        ),
-                      );
-                    },
-                  ),
+                  
                   _buildProfileOption(
                     icon: Icons.bookmark_border,
                     label: 'Saved Tips',
@@ -350,30 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     },
                   ),
-                  _buildProfileOption(
-                    icon: Icons.person,
-                    label: 'My Role',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => MyRoleScreen(role: user.role),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildProfileOption(
-                    icon: Icons.shopping_bag_outlined,
-                    label: 'My Orders',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => OrdersScreen(),
-                        ),
-                      );
-                    },
-                  ),
+                  
                   _buildProfileOption(
                     icon: Icons.event_note,
                     label: 'My Consultations',

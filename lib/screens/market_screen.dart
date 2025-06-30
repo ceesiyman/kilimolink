@@ -41,7 +41,7 @@ class _MarketScreenState extends State<MarketScreen> {
   }
 
   void _fetchProducts() {
-    setState(() {
+      setState(() {
       double? minPrice = minPriceController.text.isNotEmpty 
           ? double.tryParse(minPriceController.text) 
           : null;
@@ -107,7 +107,7 @@ class _MarketScreenState extends State<MarketScreen> {
       
       // If product was created successfully, refresh the products list
       if (result == true) {
-        setState(() {
+    setState(() {
           productsFuture = apiService.fetchProductsFromApi();
         });
       }
@@ -233,7 +233,7 @@ class _MarketScreenState extends State<MarketScreen> {
                       mainAxisSpacing: 10,
                       childAspectRatio: 0.75,
                     ),
-                    itemCount: products.length,
+                      itemCount: products.length,
                     itemBuilder: (context, index) {
                       final product = products[index];
                       return GestureDetector(

@@ -15,6 +15,10 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  String? _nameError;
+  String? _phoneError;
+  String? _emailError;
+  String? _passwordError;
 
   @override
   void dispose() {
@@ -25,26 +29,122 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _signup() async {
-    if (_nameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please fill in all required fields')),
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.green[50],
+                  ),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 50,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  'Registration Successful!',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Welcome to Kilimolink\nPlease login to continue',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                  ),
+                ),
+                SizedBox(height: 20),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // Navigate to login screen after a short delay
+    Future.delayed(Duration(seconds: 2), () {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+        (route) => false,
       );
+    });
+  }
+
+  void _signup() async {
+    // Reset error messages
+    setState(() {
+      _nameError = null;
+      _phoneError = null;
+      _emailError = null;
+      _passwordError = null;
+    });
+
+    // Validate name
+    if (_nameController.text.isEmpty) {
+      setState(() {
+        _nameError = 'Please enter your full name';
+      });
       return;
     }
 
-    if (_passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password must be at least 6 characters long')),
-      );
+    // Validate email
+    if (_emailController.text.isEmpty) {
+      setState(() {
+        _emailError = 'Please enter your email';
+      });
+      return;
+    } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(_emailController.text)) {
+      setState(() {
+        _emailError = 'Please enter a valid email address';
+      });
+      return;
+    }
+
+    // Validate password
+    if (_passwordController.text.isEmpty) {
+      setState(() {
+        _passwordError = 'Please enter a password';
+      });
+      return;
+    } else if (_passwordController.text.length < 6) {
+      setState(() {
+        _passwordError = 'Password must be at least 6 characters long';
+      });
+      return;
+    }
+
+    // Validate phone number if provided
+    if (_phoneNumberController.text.isNotEmpty && 
+        !RegExp(r'^\+?[\d\s-]+$').hasMatch(_phoneNumberController.text)) {
+      setState(() {
+        _phoneError = 'Please enter a valid phone number';
+      });
       return;
     }
 
     setState(() {
       _isLoading = true;
     });
+
     try {
       final success = useRealApi
           ? await apiService.signupFromApi(
@@ -59,30 +159,33 @@ class _SignupScreenState extends State<SignupScreen> {
               _emailController.text,
               _passwordController.text,
             );
+      
       if (success) {
-        await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('Success'),
-            content: Text('Registration successful! Please login to continue.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('OK'),
-              ),
-            ],
-          ),
-        );
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => LoginScreen()),
-          (route) => false,
-        );
+        _showSuccessDialog();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Signup failed: $e')),
-      );
+      String errorMessage = e.toString();
+      if (errorMessage.toLowerCase().contains('name')) {
+        setState(() {
+          _nameError = errorMessage;
+        });
+      } else if (errorMessage.toLowerCase().contains('phone')) {
+        setState(() {
+          _phoneError = errorMessage;
+        });
+      } else if (errorMessage.toLowerCase().contains('email')) {
+        setState(() {
+          _emailError = errorMessage;
+        });
+      } else if (errorMessage.toLowerCase().contains('password')) {
+        setState(() {
+          _passwordError = errorMessage;
+        });
+      } else {
+        setState(() {
+          _emailError = errorMessage;
+        });
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -116,6 +219,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
                   ),
+                  errorText: _nameError,
                 ),
               ),
               SizedBox(height: 20),
@@ -127,6 +231,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
                   ),
+                  errorText: _phoneError,
                 ),
                 keyboardType: TextInputType.phone,
               ),
@@ -139,6 +244,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
                   ),
+                  errorText: _emailError,
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
@@ -152,6 +258,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8.0),
                   ),
+                  errorText: _passwordError,
                 ),
               ),
               SizedBox(height: 20),
@@ -167,7 +274,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       child: Text(
-                        'sign in',
+                        'sign up',
                         style: TextStyle(color: Colors.white),
                       ),
                     ),

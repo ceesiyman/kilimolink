@@ -55,6 +55,11 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
   community.CommunityMessage? _replyingTo;
   List<File> _attachments = [];
   
+  // Replies functionality
+  Set<int> _expandedReplies = {}; // Track which messages have replies expanded
+  Map<int, List<community.MessageReply>> _messageReplies = {}; // Cache replies for each message
+  Map<int, bool> _loadingReplies = {}; // Track loading state for replies
+  
   // Scroll controller for auto-scrolling to bottom
   final ScrollController _scrollController = ScrollController();
   
@@ -240,17 +245,56 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
     if (message.isEmpty && _attachments.isEmpty) return;
 
     try {
-      final result = await communityApiService.createCommunityMessageFromApi(
-      content: message,
-        attachments: _attachments.isNotEmpty ? _attachments : null,
-      );
+      Map<String, dynamic> result;
+      
+      if (_replyingTo != null) {
+        // Use reply API when replying to a message
+        result = await communityApiService.createMessageReplyFromApi(
+          messageId: _replyingTo!.id,
+          content: message,
+        );
+      } else {
+        // Use regular message creation API
+        result = await communityApiService.createCommunityMessageFromApi(
+          content: message,
+          attachments: _attachments.isNotEmpty ? _attachments : null,
+        );
+      }
       
       if (mounted) {
         setState(() {
-          // Add new message to the end of the list (newest at bottom)
-          _communityMessages.add(result['data'] as community.CommunityMessage);
-          _lastMessageId = result['data'].id;
-        _messageController.clear();
+          if (_replyingTo != null) {
+            // For replies, we need to update the replies count of the original message
+            final index = _communityMessages.indexWhere((m) => m.id == _replyingTo!.id);
+            if (index != -1) {
+              final originalMessage = _communityMessages[index];
+              final updatedMessage = community.CommunityMessage(
+                id: originalMessage.id,
+                userId: originalMessage.userId,
+                title: originalMessage.title,
+                content: originalMessage.content,
+                category: originalMessage.category,
+                tags: originalMessage.tags,
+                isPinned: originalMessage.isPinned,
+                isAnnouncement: originalMessage.isAnnouncement,
+                viewsCount: originalMessage.viewsCount,
+                likesCount: originalMessage.likesCount,
+                repliesCount: originalMessage.repliesCount + 1,
+                createdAt: originalMessage.createdAt,
+                updatedAt: originalMessage.updatedAt,
+                user: originalMessage.user,
+                attachments: originalMessage.attachments,
+                replies: originalMessage.replies,
+                isLiked: originalMessage.isLiked,
+              );
+              _communityMessages[index] = updatedMessage;
+            }
+          } else {
+            // Add new message to the end of the list (newest at bottom)
+            _communityMessages.add(result['data'] as community.CommunityMessage);
+            _lastMessageId = result['data'].id;
+          }
+          _messageController.clear();
           _attachments.clear();
           _replyingTo = null;
         });
@@ -266,8 +310,8 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
       }
     } catch (e) {
       if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending message: $e')),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending message: $e')),
         );
       }
     }
@@ -308,6 +352,213 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
         curve: Curves.easeOut,
       );
     }
+  }
+
+  Future<void> _fetchMessageReplies(int messageId) async {
+    if (_loadingReplies[messageId] == true) return;
+    
+    setState(() {
+      _loadingReplies[messageId] = true;
+    });
+    
+    try {
+      final result = await communityApiService.fetchMessageRepliesFromApi(messageId);
+      
+      if (mounted) {
+        setState(() {
+          _messageReplies[messageId] = result['replies'] as List<community.MessageReply>;
+          _loadingReplies[messageId] = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingReplies[messageId] = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading replies: $e')),
+        );
+      }
+    }
+  }
+
+  void _toggleReplies(int messageId) {
+    setState(() {
+      if (_expandedReplies.contains(messageId)) {
+        _expandedReplies.remove(messageId);
+      } else {
+        _expandedReplies.add(messageId);
+        // Fetch replies if not already cached
+        if (!_messageReplies.containsKey(messageId)) {
+          _fetchMessageReplies(messageId);
+        }
+      }
+    });
+  }
+
+  Widget _buildReplyWidget(community.MessageReply reply, int messageId) {
+    final isCurrentUser = reply.userId == _currentUserId;
+    
+    return Padding(
+      padding: EdgeInsets.only(left: 20, top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Reply line
+          Container(
+            width: 2,
+            height: 40,
+            color: Colors.grey[300],
+          ),
+          SizedBox(width: 8),
+          
+          // Reply content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // User info
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundImage: reply.user.imageUrl != null && reply.user.imageUrl!.isNotEmpty
+                          ? NetworkImage(reply.user.imageUrl!)
+                          : null,
+                      onBackgroundImageError: (_, __) {
+                        print('Error loading reply user image: ${reply.user.imageUrl}');
+                      },
+                      child: reply.user.imageUrl == null || reply.user.imageUrl!.isEmpty
+                          ? Icon(Icons.person, size: 12, color: Colors.grey)
+                          : null,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      reply.user.name,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      '${reply.createdAt.hour.toString().padLeft(2, '0')}:${reply.createdAt.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                
+                // Reply content
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    reply.content,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                
+                // Reply actions
+                Padding(
+                  padding: EdgeInsets.only(top: 4, left: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () async {
+                          try {
+                            final result = await communityApiService.toggleMessageReplyLikeFromApi(
+                              messageId,
+                              reply.id,
+                            );
+                            
+                            if (mounted) {
+                              setState(() {
+                                final replies = _messageReplies[messageId];
+                                if (replies != null) {
+                                  final index = replies.indexWhere((r) => r.id == reply.id);
+                                  if (index != -1) {
+                                    final updatedReply = community.MessageReply(
+                                      id: reply.id,
+                                      communityMessageId: reply.communityMessageId,
+                                      userId: reply.userId,
+                                      content: reply.content,
+                                      parentReplyId: reply.parentReplyId,
+                                      likesCount: result['likes_count'],
+                                      createdAt: reply.createdAt,
+                                      updatedAt: reply.updatedAt,
+                                      user: reply.user,
+                                      replies: reply.replies,
+                                      isLiked: result['is_liked'],
+                                    );
+                                    replies[index] = updatedReply;
+                                  }
+                                }
+                              });
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error toggling like: $e')),
+                              );
+                            }
+                          }
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              reply.isLiked == true ? Icons.thumb_up : Icons.thumb_up_outlined,
+                              size: 12,
+                              color: reply.isLiked == true ? Colors.green : Colors.grey[500],
+                            ),
+                            SizedBox(width: 2),
+                            Text(
+                              '${reply.likesCount}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _replyingTo = _communityMessages.firstWhere((m) => m.id == messageId);
+                          });
+                        },
+                        child: Text(
+                          'Reply',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleMessageLike(community.CommunityMessage message) async {
@@ -1084,6 +1335,67 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                               ],
                                             ),
                                           ),
+                                          
+                                          // Show replies button
+                                          if (message.repliesCount > 0) ...[
+                                            Padding(
+                                              padding: EdgeInsets.only(
+                                                left: isCurrentUser ? 0 : 8,
+                                                right: isCurrentUser ? 8 : 0,
+                                                top: 4,
+                                              ),
+                                              child: GestureDetector(
+                                                onTap: () => _toggleReplies(message.id),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      width: 20,
+                                                      height: 1,
+                                                      color: Colors.grey[300],
+                                                    ),
+                                                    SizedBox(width: 8),
+                                                    Text(
+                                                      _expandedReplies.contains(message.id) 
+                                                          ? 'Hide replies' 
+                                                          : 'Show ${message.repliesCount} replies',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[600],
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 4),
+                                                    Icon(
+                                                      _expandedReplies.contains(message.id)
+                                                          ? Icons.keyboard_arrow_up
+                                                          : Icons.keyboard_arrow_down,
+                                                      size: 16,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            
+                                            // Replies list
+                                            if (_expandedReplies.contains(message.id)) ...[
+                                              SizedBox(height: 8),
+                                              if (_loadingReplies[message.id] == true)
+                                                Padding(
+                                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                                  child: Center(
+                                                    child: SizedBox(
+                                                      width: 20,
+                                                      height: 20,
+                                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                                    ),
+                                                  ),
+                                                )
+                                              else if (_messageReplies.containsKey(message.id))
+                                                ...(_messageReplies[message.id]!.map((reply) => _buildReplyWidget(reply, message.id))),
+                                            ],
+                                          ],
                                         ],
                                       ),
                                     ),
@@ -1214,11 +1526,11 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                               Icons.broken_image,
                                               size: 30,
                                               color: Colors.grey[600],
-                      ),
-                    );
-                  },
-                ),
-              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
                                   ),
                                   Positioned(
                                     top: 4,
