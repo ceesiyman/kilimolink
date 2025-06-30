@@ -19,11 +19,13 @@ import 'auth_storage_service.dart';
 import '../model/order_model.dart';
 import '../model/consultation_model.dart';
 import '../model/tip_category_model.dart';
+import 'package:dio/dio.dart';
 
 class ApiService {
   final String baseUrl = dotenv.env['BASE_URL'] ?? 'https://api.farmapp.com';
   final String weatherApiKey = dotenv.env['OPENWEATHERMAP_API_KEY'] ?? '';
   final AuthStorageService _authStorage = AuthStorageService();
+  final Dio _dio = Dio(BaseOptions(baseUrl: dotenv.env['BASE_URL'] ?? 'https://api.farmapp.com'));
 
   // Check and request location permissions
   Future<bool> _checkAndRequestLocationPermissions() async {
@@ -421,7 +423,7 @@ class ApiService {
     try {
       final headers = await _getAuthHeaders();
       final response = await http.post(
-        Uri.parse('$baseUrl/api/logout'),
+        Uri.parse('$baseUrl/logout'),
         headers: headers,
       );
       
@@ -2427,6 +2429,60 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Error testing upload: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> requestPasswordResetOTP(String email) async {
+    try {
+      final response = await _dio.post(
+        '/password/request-reset',
+        data: {
+          'email': email,
+        },
+      );
+      return response.data;
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response?.statusCode == 404) {
+          throw 'User not found';
+        } else if (e.response?.statusCode == 422) {
+          final errors = e.response?.data['errors'];
+          if (errors != null && errors['email'] != null) {
+            throw errors['email'][0];
+          }
+        }
+        throw 'Failed to send OTP: ${e.message ?? "Unknown error"}';
+      }
+      throw 'An error occurred while sending OTP';
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyAndResetPassword(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post(
+        '/password/reset',
+        data: data,
+      );
+      return response.data;
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response?.statusCode == 404) {
+          throw 'User not found';
+        } else if (e.response?.statusCode == 400) {
+          throw 'Invalid or expired OTP';
+        } else if (e.response?.statusCode == 422) {
+          final errors = e.response?.data['errors'];
+          if (errors != null) {
+            if (errors['otp'] != null) {
+              throw errors['otp'][0];
+            } else if (errors['new_password'] != null) {
+              throw errors['new_password'][0];
+            }
+          }
+        }
+        throw 'Failed to reset password: ${e.message ?? "Unknown error"}';
+      }
+      throw 'An error occurred while resetting password';
     }
   }
 }
