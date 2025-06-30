@@ -18,6 +18,7 @@ dependencies:
   shared_preferences: ^2.2.2
   url_launcher: ^6.3.1
   permission_handler: ^11.3.1
+  dio: ^5.8.0+1
 
 
 dev_dependencies:
