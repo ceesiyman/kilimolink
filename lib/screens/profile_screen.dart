@@ -15,6 +15,7 @@ import 'my_role_screen.dart';
 import 'login_screen.dart'; // Import LoginScreen
 import 'orders_screen.dart'; // Add import for OrdersScreen
 import 'my_consultations_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -81,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isLoggedIn = await _authStorage.isLoggedIn();
     if (isLoggedIn && mounted) {
       setState(() {
-        userFuture = useRealApi ? apiService.fetchUserFromApi() : apiService.fetchUser();
+    userFuture = useRealApi ? apiService.fetchUserFromApi() : apiService.fetchUser();
       });
     }
   }
@@ -118,8 +119,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _logout() async {
     try {
-      final success = useRealApi ? await apiService.logoutFromApi() : await apiService.logout();
-      if (success) {
+    final success = useRealApi ? await apiService.logoutFromApi() : await apiService.logout();
+    if (success) {
         // Clear any local data and navigate to login screen
         await _authStorage.clearAuthData();
         Navigator.pushAndRemoveUntil(
@@ -335,6 +336,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => MyConsultationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildProfileOption(
+                    icon: Icons.settings,
+                    label: 'Settings',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SettingsScreen(),
                         ),
                       );
                     },

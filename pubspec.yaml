@@ -17,7 +17,7 @@ dependencies:
   geolocator: ^10.1.0
   shared_preferences: ^2.2.2
   url_launcher: ^6.3.1
-  permission_handler: ^11.3.1
+  permission_handler: ^11.3.0
   dio: ^5.8.0+1
 
 
