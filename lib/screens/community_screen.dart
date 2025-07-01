@@ -251,8 +251,8 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
         // Use reply API when replying to a message
         result = await communityApiService.createMessageReplyFromApi(
           messageId: _replyingTo!.id,
-          content: message,
-        );
+      content: message,
+    );
       } else {
         // Use regular message creation API
         result = await communityApiService.createCommunityMessageFromApi(
@@ -294,7 +294,7 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
             _communityMessages.add(result['data'] as community.CommunityMessage);
             _lastMessageId = result['data'].id;
           }
-          _messageController.clear();
+        _messageController.clear();
           _attachments.clear();
           _replyingTo = null;
         });
@@ -310,8 +310,8 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending message: $e')),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending message: $e')),
         );
       }
     }
@@ -422,13 +422,10 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                   children: [
                     CircleAvatar(
                       radius: 12,
-                      backgroundImage: reply.user.imageUrl != null && reply.user.imageUrl!.isNotEmpty
-                          ? NetworkImage(reply.user.imageUrl!)
+                      backgroundImage: (reply.user.imageUrl != null && reply.user.imageUrl!.isNotEmpty)
+                          ? NetworkImage(reply.user.imageUrl!) as ImageProvider
                           : null,
-                      onBackgroundImageError: (_, __) {
-                        print('Error loading reply user image: ${reply.user.imageUrl}');
-                      },
-                      child: reply.user.imageUrl == null || reply.user.imageUrl!.isEmpty
+                      child: (reply.user.imageUrl == null || reply.user.imageUrl!.isEmpty)
                           ? Icon(Icons.person, size: 12, color: Colors.grey)
                           : null,
                     ),
@@ -1106,13 +1103,10 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                     // Other user's avatar
                                     CircleAvatar(
                                       radius: 16,
-                                      backgroundImage: message.user.imageUrl != null && message.user.imageUrl!.isNotEmpty
-                                          ? NetworkImage(message.user.imageUrl!)
+                                      backgroundImage: (message.user.imageUrl != null && message.user.imageUrl!.isNotEmpty)
+                                          ? NetworkImage(message.user.imageUrl!) as ImageProvider
                                           : null,
-                                      onBackgroundImageError: (_, __) {
-                                        print('Error loading user image: ${message.user.imageUrl}');
-                                      },
-                                      child: message.user.imageUrl == null || message.user.imageUrl!.isEmpty
+                                      child: (message.user.imageUrl == null || message.user.imageUrl!.isEmpty)
                                           ? Icon(Icons.person, size: 16, color: Colors.grey)
                                           : null,
                                     ),
@@ -1349,7 +1343,7 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                                 child: Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    Container(
+                                  Container(
                                                       width: 20,
                                                       height: 1,
                                                       color: Colors.grey[300],
@@ -1406,13 +1400,10 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                     // Current user's avatar
                                     CircleAvatar(
                                       radius: 16,
-                                      backgroundImage: message.user.imageUrl != null && message.user.imageUrl!.isNotEmpty
-                                          ? NetworkImage(message.user.imageUrl!)
+                                      backgroundImage: (message.user.imageUrl != null && message.user.imageUrl!.isNotEmpty)
+                                          ? NetworkImage(message.user.imageUrl!) as ImageProvider
                                           : null,
-                                      onBackgroundImageError: (_, __) {
-                                        print('Error loading user image: ${message.user.imageUrl}');
-                                      },
-                                      child: message.user.imageUrl == null || message.user.imageUrl!.isEmpty
+                                      child: (message.user.imageUrl == null || message.user.imageUrl!.isEmpty)
                                           ? Icon(Icons.person, size: 16, color: Colors.grey)
                                           : null,
                                     ),
@@ -1526,11 +1517,11 @@ class _CommunityScreenState extends State<CommunityScreen> with SingleTickerProv
                                               Icons.broken_image,
                                               size: 30,
                                               color: Colors.grey[600],
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
+                      ),
+                    );
+                  },
+                ),
+              ),
                                   ),
                                   Positioned(
                                     top: 4,

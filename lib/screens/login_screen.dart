@@ -181,31 +181,31 @@ class _LoginScreenState extends State<LoginScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
+                TextField(
                       controller: _emailController,
-                      decoration: InputDecoration(
+                  decoration: InputDecoration(
                         labelText: 'enter email',
                         prefixIcon: Icon(Icons.email),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        errorText: _emailError,
-                      ),
-                      keyboardType: TextInputType.emailAddress,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
                     ),
-                    SizedBox(height: 20),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'enter password',
-                        prefixIcon: Icon(Icons.lock),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
+                        errorText: _emailError,
+                  ),
+                      keyboardType: TextInputType.emailAddress,
+                ),
+                SizedBox(height: 20),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'enter password',
+                    prefixIcon: Icon(Icons.lock),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
                         ),
                         errorText: _passwordError,
-                      ),
                     ),
+                  ),
                   ],
                 ),
                 SizedBox(height: 10),
